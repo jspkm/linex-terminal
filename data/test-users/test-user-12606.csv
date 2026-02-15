@@ -1,0 +1,2 @@
+Invoice,StockCode,Description,Quantity,InvoiceDate,Price,Customer ID,Country
+495736,ADJUST,Adjustment by john on 26/01/2010 16,1,2010-01-26 16:23:00,21.0,12606.0,Spain

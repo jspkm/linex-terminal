@@ -1,0 +1,4 @@
+Invoice,StockCode,Description,Quantity,InvoiceDate,Price,Customer ID,Country
+C560645,M,Manual,-1,2011-07-20 11:23:00,451.42,15802.0,United Kingdom
+560651,M,Manual,1,2011-07-20 11:38:00,451.42,15802.0,United Kingdom
+C560653,M,Manual,-1,2011-07-20 11:40:00,451.42,15802.0,United Kingdom
