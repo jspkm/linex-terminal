@@ -1,0 +1,22 @@
+import os
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).parent
+
+# Anthropic API
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+MODEL = os.environ.get("QU_MODEL", "claude-sonnet-4-20250514")
+
+# Data paths (testing only)
+DATA_DIR = PROJECT_ROOT / "data"
+TEST_USERS_DIR = DATA_DIR / "test-users"
+
+# Card catalog
+CARDS_PATH = PROJECT_ROOT / "cards" / "cards.json"
+
+# Preprocessing
+EXCLUDED_STOCK_CODES = frozenset({
+    "POST", "D", "M", "ADJUST", "C2", "DOT", "BANK CHARGES",
+    "PADS", "TEST001", "TEST002", "AMAZONFEE", "CRUK",
+})
+MAX_REASONABLE_QUANTITY = 5000

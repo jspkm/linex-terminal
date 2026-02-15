@@ -1,0 +1,1062 @@
+[
+  {
+    "id": "amex-gold-uk",
+    "name": "American Express Preferred Rewards Gold",
+    "issuer": "American Express",
+    "region": "United Kingdom",
+    "currency": "GBP",
+    "annual_fee": 160,
+    "annual_fee_currency": "GBP",
+    "rewards_program": "Membership Rewards",
+    "earn_rates": {
+      "general": "1 Membership Rewards point per £1 spent",
+      "category_specific": "2x points at amextravel.co.uk; transferable 1:1 to airline and hotel partners including Avios, Virgin Points, Hilton Honors"
+    },
+    "signup_bonus": {
+      "points": 20000,
+      "spend_requirement": 3000,
+      "timeframe_months": 3
+    },
+    "perks": [
+      "2 complimentary airport lounge visits per year",
+      "Travel and purchase protection insurance",
+      "Gold dining collection restaurant offers",
+      "Amex Offers cashback deals",
+      "No foreign transaction fees on spending abroad"
+    ],
+    "best_for": ["Flexible rewards collectors", "Frequent travellers", "Dining enthusiasts"],
+    "typical_cardholder": "Mid-to-high spender who values flexible rewards points transferable to multiple airline and hotel loyalty programs",
+    "foreign_transaction_fee_pct": 0
+  },
+  {
+    "id": "amex-platinum-uk",
+    "name": "The Platinum Card",
+    "issuer": "American Express",
+    "region": "United Kingdom",
+    "currency": "GBP",
+    "annual_fee": 695,
+    "annual_fee_currency": "GBP",
+    "rewards_program": "Membership Rewards",
+    "earn_rates": {
+      "general": "1 Membership Rewards point per £1 spent",
+      "category_specific": "2x points on travel bookings via Amex Travel; 1:1 transfer to 18+ airline and hotel partners"
+    },
+    "signup_bonus": {
+      "points": 30000,
+      "spend_requirement": 4000,
+      "timeframe_months": 3
+    },
+    "perks": [
+      "Unlimited Priority Pass airport lounge access",
+      "Centurion Lounge access",
+      "£200 annual travel credit",
+      "Fine Hotels + Resorts and Hotel Collection benefits",
+      "Global Dining Collection",
+      "Comprehensive travel insurance",
+      "Saks Fifth Avenue credit equivalent benefits",
+      "Marriott Bonvoy Gold Elite status"
+    ],
+    "best_for": ["Premium travellers", "Airport lounge users", "Luxury hotel guests"],
+    "typical_cardholder": "High-spending frequent traveller who maximises premium lounge access, hotel benefits, and travel credits to offset the annual fee",
+    "foreign_transaction_fee_pct": 0
+  },
+  {
+    "id": "barclaycard-avios-plus",
+    "name": "Barclaycard Avios Plus",
+    "issuer": "Barclaycard",
+    "region": "United Kingdom",
+    "currency": "GBP",
+    "annual_fee": 12,
+    "annual_fee_currency": "GBP",
+    "rewards_program": "British Airways Avios",
+    "earn_rates": {
+      "general": "1.5 Avios per £1 spent",
+      "category_specific": "Avios earned on every purchase; can be used with British Airways, Iberia, and Aer Lingus"
+    },
+    "signup_bonus": {
+      "points": 25000,
+      "spend_requirement": 3000,
+      "timeframe_months": 3
+    },
+    "perks": [
+      "Companion voucher after spending £12,000 in a year",
+      "Cabin upgrade voucher",
+      "0% interest on purchases for initial period",
+      "Avios directly credited to BA Executive Club"
+    ],
+    "best_for": ["British Airways flyers", "Avios collectors", "Budget-conscious travellers"],
+    "typical_cardholder": "Regular British Airways flyer who wants to earn Avios on everyday spending and values the companion voucher for annual holidays",
+    "foreign_transaction_fee_pct": 0
+  },
+  {
+    "id": "hsbc-premier-world-elite",
+    "name": "HSBC Premier World Elite Mastercard",
+    "issuer": "HSBC",
+    "region": "United Kingdom",
+    "currency": "GBP",
+    "annual_fee": 0,
+    "annual_fee_currency": "GBP",
+    "rewards_program": "HSBC Rewards",
+    "earn_rates": {
+      "general": "1 reward point per £1 spent",
+      "category_specific": "Bonus points on travel and dining; points redeemable for travel, gift cards, or cashback"
+    },
+    "signup_bonus": null,
+    "perks": [
+      "Complimentary worldwide travel insurance",
+      "Airport lounge access via LoungeKey",
+      "No foreign transaction fees",
+      "Concierge service",
+      "Purchase protection and extended warranty",
+      "Exclusive Premier banking benefits"
+    ],
+    "best_for": ["HSBC Premier customers", "International travellers", "Fee-averse reward seekers"],
+    "typical_cardholder": "HSBC Premier banking customer who qualifies through income or savings requirements and wants premium travel benefits without an annual fee",
+    "foreign_transaction_fee_pct": 0
+  },
+  {
+    "id": "tesco-clubcard-plus",
+    "name": "Tesco Clubcard Plus Credit Card",
+    "issuer": "Tesco Bank",
+    "region": "United Kingdom",
+    "currency": "GBP",
+    "annual_fee": 0,
+    "annual_fee_currency": "GBP",
+    "rewards_program": "Tesco Clubcard",
+    "earn_rates": {
+      "general": "1 Clubcard point per £4 spent elsewhere",
+      "category_specific": "1 Clubcard point per £1 spent at Tesco; 1 point per £8 on balance transfers. Points convert to Clubcard vouchers worth 3x with reward partners"
+    },
+    "signup_bonus": null,
+    "perks": [
+      "Double Clubcard points at Tesco (with Clubcard Plus subscription)",
+      "Collect points on everyday spending",
+      "Clubcard vouchers worth up to 3x at reward partners",
+      "0% interest offers on purchases and balance transfers"
+    ],
+    "best_for": ["Regular Tesco shoppers", "Grocery reward maximisers", "Clubcard members"],
+    "typical_cardholder": "Frequent Tesco shopper who wants to accelerate Clubcard points earning on both grocery and non-grocery spending",
+    "foreign_transaction_fee_pct": 2.75
+  },
+  {
+    "id": "sainsburys-nectar",
+    "name": "Sainsbury's Bank Nectar Credit Card",
+    "issuer": "Sainsbury's Bank",
+    "region": "United Kingdom",
+    "currency": "GBP",
+    "annual_fee": 0,
+    "annual_fee_currency": "GBP",
+    "rewards_program": "Nectar",
+    "earn_rates": {
+      "general": "1 Nectar point per £5 spent elsewhere",
+      "category_specific": "2 Nectar points per £1 spent at Sainsbury's; bonus points at Nectar partner retailers including Argos, eBay, and Expedia"
+    },
+    "signup_bonus": {
+      "points": 7500,
+      "spend_requirement": 1500,
+      "timeframe_months": 3
+    },
+    "perks": [
+      "Accelerated Nectar earning at Sainsbury's",
+      "Nectar points usable across partner network",
+      "0% introductory purchase period",
+      "No annual fee"
+    ],
+    "best_for": ["Sainsbury's shoppers", "Nectar point collectors", "No-fee reward seekers"],
+    "typical_cardholder": "Regular Sainsbury's customer who wants to maximise Nectar points earning on groceries and everyday spending",
+    "foreign_transaction_fee_pct": 2.95
+  },
+  {
+    "id": "john-lewis-partnership",
+    "name": "John Lewis Partnership Credit Card",
+    "issuer": "NewDay (for John Lewis)",
+    "region": "United Kingdom",
+    "currency": "GBP",
+    "annual_fee": 0,
+    "annual_fee_currency": "GBP",
+    "rewards_program": "John Lewis Partnership Rewards",
+    "earn_rates": {
+      "general": "1 point per £4 spent elsewhere (worth 0.25%)",
+      "category_specific": "1 point per £1 spent at John Lewis & Waitrose (worth 1%); points convert to John Lewis/Waitrose gift vouchers"
+    },
+    "signup_bonus": null,
+    "perks": [
+      "Earn reward vouchers for John Lewis and Waitrose",
+      "Free standard delivery at John Lewis",
+      "2-year guarantee on electrical products bought with the card at John Lewis",
+      "Price match promise at John Lewis"
+    ],
+    "best_for": ["John Lewis shoppers", "Waitrose customers", "Home and lifestyle spenders"],
+    "typical_cardholder": "Regular John Lewis and Waitrose shopper who values store reward vouchers and extended product guarantees",
+    "foreign_transaction_fee_pct": 2.99
+  },
+  {
+    "id": "ms-credit-card",
+    "name": "M&S Credit Card",
+    "issuer": "HSBC (for M&S Bank)",
+    "region": "United Kingdom",
+    "currency": "GBP",
+    "annual_fee": 0,
+    "annual_fee_currency": "GBP",
+    "rewards_program": "M&S Sparks",
+    "earn_rates": {
+      "general": "1 M&S point per £5 spent elsewhere",
+      "category_specific": "1 M&S point per £1 spent at M&S stores and online; points convert to M&S vouchers"
+    },
+    "signup_bonus": {
+      "points": 500,
+      "spend_requirement": 500,
+      "timeframe_months": 3
+    },
+    "perks": [
+      "Accelerated M&S Sparks points earning",
+      "M&S shopping vouchers on points redemption",
+      "Personalised Sparks offers",
+      "0% introductory purchase offers"
+    ],
+    "best_for": ["M&S shoppers", "Grocery and clothing spenders", "Sparks loyalty members"],
+    "typical_cardholder": "Loyal M&S customer who shops regularly for food and clothing and wants to earn store rewards on all spending",
+    "foreign_transaction_fee_pct": 2.99
+  },
+  {
+    "id": "lloyds-avios-rewards",
+    "name": "Lloyds Bank Avios Rewards Credit Card",
+    "issuer": "Lloyds Bank",
+    "region": "United Kingdom",
+    "currency": "GBP",
+    "annual_fee": 24,
+    "annual_fee_currency": "GBP",
+    "rewards_program": "British Airways Avios",
+    "earn_rates": {
+      "general": "1 Avios per £1 spent",
+      "category_specific": "1.5 Avios per £1 at selected retailers; Avios deposited directly into BA Executive Club account"
+    },
+    "signup_bonus": {
+      "points": 15000,
+      "spend_requirement": 2000,
+      "timeframe_months": 3
+    },
+    "perks": [
+      "Collect Avios on everyday spending",
+      "Companion voucher eligibility (Premier variant)",
+      "BA Executive Club integration",
+      "Optional travel insurance add-on"
+    ],
+    "best_for": ["Avios collectors", "BA loyalty members", "Everyday Avios earners"],
+    "typical_cardholder": "BA Executive Club member looking for a non-Amex option to earn Avios on daily spend across the Visa network",
+    "foreign_transaction_fee_pct": 2.99
+  },
+  {
+    "id": "capital-one-classic-uk",
+    "name": "Capital One Classic Credit Card",
+    "issuer": "Capital One",
+    "region": "United Kingdom",
+    "currency": "GBP",
+    "annual_fee": 0,
+    "annual_fee_currency": "GBP",
+    "rewards_program": "Capital One Rewards",
+    "earn_rates": {
+      "general": "0.5% cashback on all spending",
+      "category_specific": "Flat-rate cashback with no bonus categories; no cap on cashback earned"
+    },
+    "signup_bonus": null,
+    "perks": [
+      "No annual fee",
+      "Credit building features",
+      "Free CreditWise credit score monitoring",
+      "Accepted on the Mastercard network worldwide"
+    ],
+    "best_for": ["Credit builders", "Simple cashback seekers", "No-fee card users"],
+    "typical_cardholder": "Someone building or rebuilding credit who wants a simple no-fee card with basic cashback rewards",
+    "foreign_transaction_fee_pct": 0
+  },
+  {
+    "id": "n26-metal",
+    "name": "N26 Metal",
+    "issuer": "N26",
+    "region": "European Union",
+    "currency": "EUR",
+    "annual_fee": 202,
+    "annual_fee_currency": "EUR",
+    "rewards_program": "N26 Partner Rewards",
+    "earn_rates": {
+      "general": "0.5% cashback on all purchases",
+      "category_specific": "Up to 1% cashback with selected N26 partner brands; exclusive partner offers and discounts"
+    },
+    "signup_bonus": null,
+    "perks": [
+      "Metal Mastercard (stainless steel)",
+      "Comprehensive travel insurance including medical",
+      "Winter sports and rental car coverage",
+      "Dedicated N26 Metal support line",
+      "8 free ATM withdrawals per month",
+      "No foreign currency fees in all currencies"
+    ],
+    "best_for": ["European travellers", "Digital-first banking users", "Premium debit card seekers"],
+    "typical_cardholder": "Tech-savvy European who travels frequently and prefers a mobile-first banking experience with travel insurance included",
+    "foreign_transaction_fee_pct": 0
+  },
+  {
+    "id": "revolut-ultra",
+    "name": "Revolut Ultra",
+    "issuer": "Revolut",
+    "region": "European Union",
+    "currency": "EUR",
+    "annual_fee": 540,
+    "annual_fee_currency": "EUR",
+    "rewards_program": "RevPoints",
+    "earn_rates": {
+      "general": "1 RevPoint per £1/€1 spent (1% cashback equivalent)",
+      "category_specific": "Up to 1% in RevPoints on all card spending; points redeemable for flights, upgrades, experiences, and cashback"
+    },
+    "signup_bonus": null,
+    "perks": [
+      "Unlimited currency exchange at interbank rate",
+      "Unlimited free ATM withdrawals globally",
+      "LoungeKey airport lounge access (6 per year)",
+      "Comprehensive travel and medical insurance",
+      "Exclusive concierge service",
+      "Priority customer support",
+      "Metal card with exclusive designs"
+    ],
+    "best_for": ["Frequent international travellers", "Multi-currency users", "Premium fintech enthusiasts"],
+    "typical_cardholder": "Global traveller and digital banking enthusiast who values unlimited FX, airport lounges, and earning rewards on all spending",
+    "foreign_transaction_fee_pct": 0
+  },
+  {
+    "id": "curve-metal",
+    "name": "Curve Metal",
+    "issuer": "Curve",
+    "region": "European Union",
+    "currency": "GBP",
+    "annual_fee": 180,
+    "annual_fee_currency": "GBP",
+    "rewards_program": "Curve Cashback",
+    "earn_rates": {
+      "general": "1% cashback at 6 selected retailers",
+      "category_specific": "1% cashback at 6 chosen retailers of your choice; Go Back in Time feature to switch transactions between cards retroactively"
+    },
+    "signup_bonus": null,
+    "perks": [
+      "All your cards in one smart card",
+      "1% cashback at 6 chosen retailers",
+      "Fee-free spending abroad up to £1,000/month",
+      "Worldwide travel and device insurance",
+      "LoungeKey airport lounge access",
+      "Go Back in Time — move past transactions to another card",
+      "Anti-embarrassment mode (auto-backup card)"
+    ],
+    "best_for": ["Card consolidators", "International spenders", "Cashback optimisers"],
+    "typical_cardholder": "Organised spender who wants to consolidate multiple payment cards and earn targeted cashback while travelling abroad fee-free",
+    "foreign_transaction_fee_pct": 0
+  },
+  {
+    "id": "air-france-klm-card",
+    "name": "Air France KLM - American Express Platinum",
+    "issuer": "American Express",
+    "region": "France",
+    "currency": "EUR",
+    "annual_fee": 230,
+    "annual_fee_currency": "EUR",
+    "rewards_program": "Flying Blue",
+    "earn_rates": {
+      "general": "1 Flying Blue Mile per €1 spent",
+      "category_specific": "2 Miles per €1 on Air France-KLM purchases; additional bonus Miles at selected partners"
+    },
+    "signup_bonus": {
+      "points": 15000,
+      "spend_requirement": 3000,
+      "timeframe_months": 3
+    },
+    "perks": [
+      "Flying Blue Silver status qualification acceleration",
+      "Companion ticket discount vouchers",
+      "Travel insurance included",
+      "Amex Offers and experiences",
+      "Priority check-in and boarding with Air France/KLM"
+    ],
+    "best_for": ["Air France and KLM flyers", "Flying Blue members", "European travellers"],
+    "typical_cardholder": "Frequent Air France or KLM flyer based in France who wants to accelerate Flying Blue Miles earning and status qualification",
+    "foreign_transaction_fee_pct": 2.0
+  },
+  {
+    "id": "lufthansa-miles-and-more",
+    "name": "Miles & More Credit Card Gold",
+    "issuer": "Deutsche Bank / Lufthansa",
+    "region": "Germany",
+    "currency": "EUR",
+    "annual_fee": 110,
+    "annual_fee_currency": "EUR",
+    "rewards_program": "Miles & More",
+    "earn_rates": {
+      "general": "1 award mile per €2 spent",
+      "category_specific": "2 miles per €1 on Lufthansa Group flights; bonus miles at Miles & More partner merchants and hotels"
+    },
+    "signup_bonus": {
+      "points": 20000,
+      "spend_requirement": 5000,
+      "timeframe_months": 6
+    },
+    "perks": [
+      "Comprehensive travel insurance package",
+      "Airport lounge vouchers",
+      "2 award miles per €1 on Lufthansa Group airline purchases",
+      "Miles & More status qualification support",
+      "Lost luggage and flight delay insurance"
+    ],
+    "best_for": ["Lufthansa Group flyers", "Star Alliance travellers", "Miles & More members"],
+    "typical_cardholder": "Regular Lufthansa, Swiss, or Austrian Airlines flyer in the DACH region who wants to earn award miles on everyday spending",
+    "foreign_transaction_fee_pct": 1.75
+  },
+  {
+    "id": "sas-eurobonus-mastercard",
+    "name": "SAS EuroBonus World Mastercard",
+    "issuer": "SEB",
+    "region": "Sweden",
+    "currency": "SEK",
+    "annual_fee": 1500,
+    "annual_fee_currency": "SEK",
+    "rewards_program": "SAS EuroBonus",
+    "earn_rates": {
+      "general": "1 EuroBonus point per 10 SEK spent",
+      "category_specific": "2x points on SAS flights; bonus points at EuroBonus partner merchants and online portal"
+    },
+    "signup_bonus": {
+      "points": 10000,
+      "spend_requirement": 10000,
+      "timeframe_months": 3
+    },
+    "perks": [
+      "Accelerated EuroBonus point earning",
+      "Travel insurance included",
+      "SAS lounge access vouchers",
+      "Status point bonuses toward SAS EuroBonus Silver/Gold",
+      "Mastercard World benefits and offers"
+    ],
+    "best_for": ["SAS frequent flyers", "Scandinavian travellers", "Star Alliance members"],
+    "typical_cardholder": "Nordic-based SAS loyalist who flies frequently within Scandinavia and Europe and wants to earn EuroBonus points on daily spending",
+    "foreign_transaction_fee_pct": 1.75
+  },
+  {
+    "id": "norwegian-reward-world",
+    "name": "Norwegian Reward World Mastercard",
+    "issuer": "Bank Norwegian",
+    "region": "Norway",
+    "currency": "NOK",
+    "annual_fee": 0,
+    "annual_fee_currency": "NOK",
+    "rewards_program": "Norwegian CashPoints",
+    "earn_rates": {
+      "general": "0.5% CashPoints on all purchases",
+      "category_specific": "Up to 1% CashPoints on Norwegian Air purchases; CashPoints usable for discounts on Norwegian flights"
+    },
+    "signup_bonus": null,
+    "perks": [
+      "No annual fee",
+      "No foreign transaction fees",
+      "CashPoints redeemable on Norwegian Air flights",
+      "Travel insurance included",
+      "Mastercard World benefits",
+      "Free ATM withdrawals"
+    ],
+    "best_for": ["Norwegian Air flyers", "Nordic travellers", "No-fee reward seekers"],
+    "typical_cardholder": "Budget-conscious Norwegian traveller who flies Norwegian Air and wants to earn flight discounts without paying an annual card fee",
+    "foreign_transaction_fee_pct": 0
+  },
+  {
+    "id": "chase-sapphire-preferred",
+    "name": "Chase Sapphire Preferred",
+    "issuer": "Chase",
+    "region": "United States",
+    "currency": "USD",
+    "annual_fee": 95,
+    "annual_fee_currency": "USD",
+    "rewards_program": "Chase Ultimate Rewards",
+    "earn_rates": {
+      "general": "1x Ultimate Rewards point per $1 on all other purchases",
+      "category_specific": "5x on travel purchased through Chase Travel; 3x on dining, select streaming services, and online groceries; 2x on all other travel"
+    },
+    "signup_bonus": {
+      "points": 60000,
+      "spend_requirement": 4000,
+      "timeframe_months": 3
+    },
+    "perks": [
+      "Points worth 25% more when redeemed through Chase Travel",
+      "1:1 transfer to 14+ airline and hotel partners",
+      "Trip cancellation and interruption insurance",
+      "Primary car rental collision damage waiver",
+      "No foreign transaction fees",
+      "DoorDash DashPass membership"
+    ],
+    "best_for": ["Travel rewards beginners", "Dining enthusiasts", "Flexible points collectors"],
+    "typical_cardholder": "Mid-range spender who dines out frequently and wants a versatile travel rewards card with strong transfer partners at a reasonable annual fee",
+    "foreign_transaction_fee_pct": 0
+  },
+  {
+    "id": "chase-sapphire-reserve",
+    "name": "Chase Sapphire Reserve",
+    "issuer": "Chase",
+    "region": "United States",
+    "currency": "USD",
+    "annual_fee": 550,
+    "annual_fee_currency": "USD",
+    "rewards_program": "Chase Ultimate Rewards",
+    "earn_rates": {
+      "general": "1x Ultimate Rewards point per $1 on all other purchases",
+      "category_specific": "10x on hotels and car rentals through Chase Travel; 5x on flights through Chase Travel; 3x on dining and travel worldwide"
+    },
+    "signup_bonus": {
+      "points": 60000,
+      "spend_requirement": 4000,
+      "timeframe_months": 3
+    },
+    "perks": [
+      "$300 annual travel credit",
+      "Priority Pass unlimited airport lounge access",
+      "Points worth 50% more through Chase Travel",
+      "1:1 transfer to 14+ airline and hotel partners",
+      "Global Entry or TSA PreCheck credit",
+      "Primary car rental CDW insurance",
+      "Comprehensive trip and baggage insurance",
+      "Lyft Pink membership"
+    ],
+    "best_for": ["Frequent travellers", "Airport lounge users", "Premium travel rewards maximisers"],
+    "typical_cardholder": "High-spending frequent traveller who values lounge access, premium travel protections, and maximising point value through transfers",
+    "foreign_transaction_fee_pct": 0
+  },
+  {
+    "id": "amex-gold-us",
+    "name": "American Express Gold Card",
+    "issuer": "American Express",
+    "region": "United States",
+    "currency": "USD",
+    "annual_fee": 250,
+    "annual_fee_currency": "USD",
+    "rewards_program": "Membership Rewards",
+    "earn_rates": {
+      "general": "1x Membership Rewards point per $1 on other purchases",
+      "category_specific": "4x on restaurants worldwide; 4x on U.S. supermarkets (up to $25,000/year); 3x on flights booked directly with airlines"
+    },
+    "signup_bonus": {
+      "points": 60000,
+      "spend_requirement": 6000,
+      "timeframe_months": 6
+    },
+    "perks": [
+      "$120 annual dining credit (Grubhub, The Cheesecake Factory, etc.)",
+      "$120 annual Uber Cash credit",
+      "1:1 transfer to 20+ airline and hotel partners",
+      "Purchase protection and return protection",
+      "No foreign transaction fees"
+    ],
+    "best_for": ["Foodies and diners", "Grocery shoppers", "Flexible points collectors"],
+    "typical_cardholder": "Food-focused spender who dines out regularly, shops at U.S. supermarkets, and wants strong earn rates with flexible point transfers",
+    "foreign_transaction_fee_pct": 0
+  },
+  {
+    "id": "amex-platinum-us",
+    "name": "The Platinum Card from American Express",
+    "issuer": "American Express",
+    "region": "United States",
+    "currency": "USD",
+    "annual_fee": 695,
+    "annual_fee_currency": "USD",
+    "rewards_program": "Membership Rewards",
+    "earn_rates": {
+      "general": "1x Membership Rewards point per $1 on other purchases",
+      "category_specific": "5x on flights booked directly with airlines or via Amex Travel; 5x on prepaid hotels via Amex Travel"
+    },
+    "signup_bonus": {
+      "points": 80000,
+      "spend_requirement": 8000,
+      "timeframe_months": 6
+    },
+    "perks": [
+      "$200 annual airline fee credit",
+      "$200 annual hotel credit (FHR/THC)",
+      "Centurion Lounge and Priority Pass lounge access",
+      "Global Entry or TSA PreCheck credit ($100)",
+      "$155 Walmart+ credit",
+      "$240 digital entertainment credit",
+      "Fine Hotels + Resorts benefits",
+      "Hilton Honors Gold and Marriott Bonvoy Gold status",
+      "1:1 transfer to 20+ airline and hotel partners",
+      "Comprehensive travel insurance"
+    ],
+    "best_for": ["Ultra-frequent travellers", "Lounge enthusiasts", "Premium travel perks maximisers"],
+    "typical_cardholder": "Very high spender and frequent flyer who can utilise the extensive suite of credits and lounge benefits to justify the premium annual fee",
+    "foreign_transaction_fee_pct": 0
+  },
+  {
+    "id": "capital-one-venture",
+    "name": "Capital One Venture Rewards Credit Card",
+    "issuer": "Capital One",
+    "region": "United States",
+    "currency": "USD",
+    "annual_fee": 95,
+    "annual_fee_currency": "USD",
+    "rewards_program": "Capital One Miles",
+    "earn_rates": {
+      "general": "2x miles per $1 on every purchase",
+      "category_specific": "5x miles on hotels and rental cars booked through Capital One Travel; miles transferable 1:1 to 15+ airline and hotel partners"
+    },
+    "signup_bonus": {
+      "points": 75000,
+      "spend_requirement": 4000,
+      "timeframe_months": 3
+    },
+    "perks": [
+      "Transfer miles to 15+ travel loyalty programs",
+      "Global Entry or TSA PreCheck credit ($100)",
+      "No foreign transaction fees",
+      "Travel accident insurance",
+      "24/7 travel assistance"
+    ],
+    "best_for": ["Simple travel rewards seekers", "Flat-rate earners", "Transfer partner users"],
+    "typical_cardholder": "Traveller who prefers a simple flat-rate earning structure with the flexibility to either erase travel purchases or transfer to airline partners",
+    "foreign_transaction_fee_pct": 0
+  },
+  {
+    "id": "citi-premier",
+    "name": "Citi Premier Card",
+    "issuer": "Citibank",
+    "region": "United States",
+    "currency": "USD",
+    "annual_fee": 95,
+    "annual_fee_currency": "USD",
+    "rewards_program": "Citi ThankYou Points",
+    "earn_rates": {
+      "general": "1x ThankYou Point per $1 on other purchases",
+      "category_specific": "3x on air travel and hotels; 3x on restaurants; 3x on supermarkets; 3x on gas stations; 1x on everything else"
+    },
+    "signup_bonus": {
+      "points": 60000,
+      "spend_requirement": 4000,
+      "timeframe_months": 3
+    },
+    "perks": [
+      "Transfer points 1:1 to airline and hotel partners",
+      "No foreign transaction fees",
+      "Trip interruption protection",
+      "Annual hotel savings benefit through ThankYou portal",
+      "Citi Entertainment access"
+    ],
+    "best_for": ["Multi-category spenders", "Travel and dining enthusiasts", "Transfer partner users"],
+    "typical_cardholder": "Everyday spender who earns across multiple high-frequency categories and values the ability to transfer points to a broad partner network",
+    "foreign_transaction_fee_pct": 0
+  },
+  {
+    "id": "marriott-bonvoy-amex",
+    "name": "Marriott Bonvoy American Express Card",
+    "issuer": "American Express",
+    "region": "United States",
+    "currency": "USD",
+    "annual_fee": 185,
+    "annual_fee_currency": "USD",
+    "rewards_program": "Marriott Bonvoy",
+    "earn_rates": {
+      "general": "2x Bonvoy points per $1 on all other purchases",
+      "category_specific": "6x points at Marriott Bonvoy hotels; 4x at U.S. restaurants, U.S. gas stations, and U.S. supermarkets"
+    },
+    "signup_bonus": {
+      "points": 85000,
+      "spend_requirement": 4000,
+      "timeframe_months": 3
+    },
+    "perks": [
+      "15 Elite Night Credits toward Marriott status each year",
+      "Complimentary Marriott Bonvoy Silver Elite status",
+      "1 Free Night Award annually (up to 35,000 points value)",
+      "Priority Late Checkout at Marriott properties",
+      "Transfer Bonvoy points to 40+ airline partners",
+      "No foreign transaction fees"
+    ],
+    "best_for": ["Marriott loyalists", "Hotel rewards seekers", "Status chasers"],
+    "typical_cardholder": "Frequent Marriott hotel guest who values elite status perks, free night awards, and earning accelerated points on stays and everyday spending",
+    "foreign_transaction_fee_pct": 0
+  },
+  {
+    "id": "hsbc-visa-platinum-sg",
+    "name": "HSBC Visa Platinum Credit Card",
+    "issuer": "HSBC",
+    "region": "Singapore",
+    "currency": "SGD",
+    "annual_fee": 192,
+    "annual_fee_currency": "SGD",
+    "rewards_program": "HSBC Rewards+",
+    "earn_rates": {
+      "general": "1 reward point per S$1 spent",
+      "category_specific": "5x reward points on dining and online shopping; 0.4% cashback equivalent when redeemed for rebates"
+    },
+    "signup_bonus": {
+      "points": 15000,
+      "spend_requirement": 800,
+      "timeframe_months": 2
+    },
+    "perks": [
+      "5x rewards on dining and online shopping",
+      "Points redeemable for KrisFlyer miles, cashback, or vouchers",
+      "Complimentary travel insurance",
+      "Dining privileges and promotions",
+      "0% instalment payment plans at selected merchants"
+    ],
+    "best_for": ["Singapore diners", "Online shoppers", "KrisFlyer mile earners"],
+    "typical_cardholder": "Singaporean who dines out regularly and shops online, looking to earn accelerated rewards convertible to airline miles or cashback",
+    "foreign_transaction_fee_pct": 3.5
+  },
+  {
+    "id": "anz-rewards-platinum-au",
+    "name": "ANZ Rewards Platinum Credit Card",
+    "issuer": "ANZ",
+    "region": "Australia",
+    "currency": "AUD",
+    "annual_fee": 95,
+    "annual_fee_currency": "AUD",
+    "rewards_program": "ANZ Rewards",
+    "earn_rates": {
+      "general": "1 ANZ Reward Point per A$1 spent domestically",
+      "category_specific": "2x points on contactless payments under A$100; points transferable to Velocity Frequent Flyer, KrisFlyer, and Asia Miles"
+    },
+    "signup_bonus": {
+      "points": 30000,
+      "spend_requirement": 2000,
+      "timeframe_months": 3
+    },
+    "perks": [
+      "Transfer points to multiple airline partners",
+      "Complimentary international travel insurance",
+      "ANZ Digital Wallet compatible",
+      "Up to 55 days interest-free on purchases",
+      "0% balance transfer introductory offers"
+    ],
+    "best_for": ["Australian frequent flyers", "Velocity and KrisFlyer members", "Flexible rewards earners"],
+    "typical_cardholder": "Australian consumer who wants to earn flexible reward points on daily spending with the option to transfer to preferred airline loyalty program",
+    "foreign_transaction_fee_pct": 3.0
+  },
+  {
+    "id": "citi-rewards-sg",
+    "name": "Citi Rewards Card",
+    "issuer": "Citibank",
+    "region": "Singapore",
+    "currency": "SGD",
+    "annual_fee": 192,
+    "annual_fee_currency": "SGD",
+    "rewards_program": "Citi ThankYou Rewards",
+    "earn_rates": {
+      "general": "1 reward point per S$1 spent",
+      "category_specific": "10x points on online shopping, department stores, and select streaming services; 1 point per S$1 on other spending"
+    },
+    "signup_bonus": {
+      "points": 20000,
+      "spend_requirement": 1000,
+      "timeframe_months": 2
+    },
+    "perks": [
+      "10x points acceleration on online and department store spending",
+      "Points convertible to KrisFlyer miles (10,000 points = 4 miles conversion)",
+      "Citi World Privileges access to dining and lifestyle offers",
+      "Instalment payment plans",
+      "Supplementary card at no extra fee"
+    ],
+    "best_for": ["Online shoppers in Singapore", "Department store spenders", "KrisFlyer collectors"],
+    "typical_cardholder": "Singaporean online shopper who spends heavily on e-commerce and at department stores and wants to convert points to air miles",
+    "foreign_transaction_fee_pct": 3.25
+  },
+  {
+    "id": "emirates-skywards-infinite",
+    "name": "Emirates Skywards Infinite Credit Card",
+    "issuer": "Emirates NBD",
+    "region": "United Arab Emirates",
+    "currency": "AED",
+    "annual_fee": 1500,
+    "annual_fee_currency": "AED",
+    "rewards_program": "Emirates Skywards",
+    "earn_rates": {
+      "general": "1 Skywards Mile per AED 3 spent",
+      "category_specific": "3 Skywards Miles per AED 3 on Emirates and dnata purchases; 1 Mile per AED 3 on all other spending"
+    },
+    "signup_bonus": {
+      "points": 25000,
+      "spend_requirement": 5000,
+      "timeframe_months": 3
+    },
+    "perks": [
+      "Complimentary airport lounge access (Emirates and partner lounges)",
+      "Complimentary travel insurance",
+      "Skywards Silver or Gold tier fast-track",
+      "Valet parking at Dubai airports",
+      "Golf privileges and lifestyle offers in UAE",
+      "Buy 1 Get 1 free movie tickets",
+      "Free supplementary cards"
+    ],
+    "best_for": ["Emirates airline flyers", "UAE-based travellers", "Skywards Miles collectors"],
+    "typical_cardholder": "UAE resident who flies Emirates regularly and wants to accelerate Skywards Miles earning with premium lounge and lifestyle benefits",
+    "foreign_transaction_fee_pct": 2.75
+  },
+  {
+    "id": "mashreq-solitaire",
+    "name": "Mashreq Solitaire Credit Card",
+    "issuer": "Mashreq Bank",
+    "region": "United Arab Emirates",
+    "currency": "AED",
+    "annual_fee": 5000,
+    "annual_fee_currency": "AED",
+    "rewards_program": "Mashreq Salaam Points",
+    "earn_rates": {
+      "general": "1 Salaam Point per AED 1 spent domestically",
+      "category_specific": "2x points on international spending; points redeemable for flights, hotel stays, cashback, and gift vouchers"
+    },
+    "signup_bonus": {
+      "points": 100000,
+      "spend_requirement": 10000,
+      "timeframe_months": 3
+    },
+    "perks": [
+      "Unlimited worldwide airport lounge access",
+      "Complimentary golf rounds at premium courses",
+      "Dedicated relationship manager",
+      "Comprehensive travel and purchase insurance",
+      "Concierge service (24/7)",
+      "Valet parking at premium locations in UAE",
+      "Buy 1 Get 1 free dining offers",
+      "Premium lifestyle and entertainment privileges"
+    ],
+    "best_for": ["Ultra-high spenders in the UAE", "Luxury lifestyle seekers", "Lounge-heavy travellers"],
+    "typical_cardholder": "High-net-worth UAE resident seeking a premium lifestyle card with unlimited lounge access, concierge service, and strong international rewards earning",
+    "foreign_transaction_fee_pct": 2.5
+  },
+  {
+    "id": "td-aeroplan-visa-infinite",
+    "name": "TD Aeroplan Visa Infinite Card",
+    "issuer": "TD Bank",
+    "region": "Canada",
+    "currency": "CAD",
+    "annual_fee": 139,
+    "annual_fee_currency": "CAD",
+    "rewards_program": "Air Canada Aeroplan",
+    "earn_rates": {
+      "general": "1 Aeroplan point per $1 on all other purchases",
+      "category_specific": "1.5x Aeroplan points per $1 on Air Canada, gas, grocery, and recurring bill purchases"
+    },
+    "signup_bonus": {
+      "points": 40000,
+      "spend_requirement": 7500,
+      "timeframe_months": 4
+    },
+    "perks": [
+      "First checked bag free on Air Canada flights",
+      "Priority boarding on Air Canada",
+      "Annual companion fare discount",
+      "TD travel medical insurance",
+      "Aeroplan 25K Status qualifying acceleration",
+      "Car rental collision/loss damage insurance"
+    ],
+    "best_for": ["Air Canada flyers", "Aeroplan collectors", "Canadian travellers"],
+    "typical_cardholder": "Canadian who flies Air Canada regularly and wants to earn Aeroplan points on everyday categories like gas and groceries while enjoying Air Canada perks",
+    "foreign_transaction_fee_pct": 2.5
+  },
+  {
+    "id": "scotiabank-gold-amex",
+    "name": "Scotiabank Gold American Express Card",
+    "issuer": "Scotiabank",
+    "region": "Canada",
+    "currency": "CAD",
+    "annual_fee": 150,
+    "annual_fee_currency": "CAD",
+    "rewards_program": "Scotia Rewards / Scene+",
+    "earn_rates": {
+      "general": "1 Scotia Rewards point per $1 on all other purchases",
+      "category_specific": "5x points on groceries and dining; 3x points on entertainment, transit, and gas; 1x on everything else"
+    },
+    "signup_bonus": {
+      "points": 40000,
+      "spend_requirement": 7500,
+      "timeframe_months": 4
+    },
+    "perks": [
+      "Comprehensive travel insurance (trip cancellation, medical, baggage)",
+      "Purchase protection and extended warranty",
+      "Scene+ integration for movie and entertainment rewards",
+      "No foreign transaction fees (Scotiabank Passport variant)",
+      "Points transferable to Scene+ program"
+    ],
+    "best_for": ["Canadian grocery and dining spenders", "Scene+ members", "Multi-category rewards seekers"],
+    "typical_cardholder": "Canadian family spender who earns heavily in grocery and dining categories and values comprehensive travel insurance with flexible redemption options",
+    "foreign_transaction_fee_pct": 2.5
+  },
+  {
+    "id": "itau-azul-infinite",
+    "name": "Itau Azul Infinite",
+    "issuer": "Itau Unibanco",
+    "region": "Brazil",
+    "currency": "BRL",
+    "annual_fee": 890,
+    "annual_fee_currency": "BRL",
+    "rewards_program": "TudoAzul (Azul Airlines)",
+    "earn_rates": {
+      "general": "2 TudoAzul points per R$1 spent domestically",
+      "category_specific": "3x points on international spending; points transfer to Azul Airlines TudoAzul program for flights and upgrades"
+    },
+    "signup_bonus": {
+      "points": 50000,
+      "spend_requirement": 5000,
+      "timeframe_months": 3
+    },
+    "perks": [
+      "Azul Airlines lounge access",
+      "Comprehensive international travel insurance",
+      "Concierge service",
+      "Visa Infinite dining and lifestyle benefits",
+      "Free supplementary cards",
+      "Priority Azul baggage handling"
+    ],
+    "best_for": ["Azul Airlines frequent flyers", "Brazilian travellers", "TudoAzul loyalty members"],
+    "typical_cardholder": "Brazilian traveller who flies Azul Airlines frequently and wants to maximise TudoAzul points earning with premium Visa Infinite benefits",
+    "foreign_transaction_fee_pct": 5.5
+  },
+  {
+    "id": "amex-british-airways-premium-plus",
+    "name": "British Airways American Express Premium Plus Card",
+    "issuer": "American Express",
+    "region": "United Kingdom",
+    "currency": "GBP",
+    "annual_fee": 250,
+    "annual_fee_currency": "GBP",
+    "rewards_program": "British Airways Avios",
+    "earn_rates": {
+      "general": "1.5 Avios per £1 spent on everyday purchases",
+      "category_specific": "3 Avios per £1 spent directly with British Airways; bonus Avios on Amex Travel bookings"
+    },
+    "signup_bonus": {
+      "points": 25000,
+      "spend_requirement": 3000,
+      "timeframe_months": 3
+    },
+    "perks": [
+      "Travel Together companion ticket (after £12,000 annual spend)",
+      "2-4-1 BA companion voucher on reward flights",
+      "Cabin upgrade voucher eligibility",
+      "Comprehensive travel insurance",
+      "No foreign transaction fees"
+    ],
+    "best_for": ["British Airways loyalists", "Companion voucher seekers", "Avios maximisers"],
+    "typical_cardholder": "Dedicated British Airways flyer with significant annual spend who targets the companion voucher to effectively halve the cost of reward flights",
+    "foreign_transaction_fee_pct": 0
+  },
+  {
+    "id": "virgin-atlantic-reward-plus",
+    "name": "Virgin Atlantic Reward+ Credit Card",
+    "issuer": "Virgin Money",
+    "region": "United Kingdom",
+    "currency": "GBP",
+    "annual_fee": 160,
+    "annual_fee_currency": "GBP",
+    "rewards_program": "Virgin Atlantic Flying Club",
+    "earn_rates": {
+      "general": "1.5 Virgin Points per £1 spent",
+      "category_specific": "3 Virgin Points per £1 spent with Virgin Atlantic; points usable for Virgin Atlantic flights, upgrades, and partner redemptions"
+    },
+    "signup_bonus": {
+      "points": 15000,
+      "spend_requirement": 3000,
+      "timeframe_months": 3
+    },
+    "perks": [
+      "Earn Virgin Points on all purchases",
+      "2-4-1 companion voucher (after qualifying spend)",
+      "Flying Club Silver status fast-track opportunities",
+      "Virgin Atlantic travel insurance",
+      "No foreign transaction fees"
+    ],
+    "best_for": ["Virgin Atlantic flyers", "Virgin Points collectors", "Transatlantic travellers"],
+    "typical_cardholder": "UK-based traveller who flies Virgin Atlantic routes (especially transatlantic) and wants to earn points toward free flights and upgrades",
+    "foreign_transaction_fee_pct": 0
+  },
+  {
+    "id": "amex-cobalt-ca",
+    "name": "American Express Cobalt Card",
+    "issuer": "American Express",
+    "region": "Canada",
+    "currency": "CAD",
+    "annual_fee": 156,
+    "annual_fee_currency": "CAD",
+    "rewards_program": "Membership Rewards",
+    "earn_rates": {
+      "general": "1x Membership Rewards point per $1 on other purchases",
+      "category_specific": "5x on food and drinks (restaurants, food delivery, and groceries); 3x on streaming and transit; 2x on travel"
+    },
+    "signup_bonus": {
+      "points": 30000,
+      "spend_requirement": 6000,
+      "timeframe_months": 6
+    },
+    "perks": [
+      "Monthly bonus point offers",
+      "Transfer points to Aeroplan, Marriott Bonvoy, Hilton, and others",
+      "Front-of-line access to entertainment events",
+      "Amex Offers for statement credits",
+      "Purchase protection and buyer's assurance"
+    ],
+    "best_for": ["Canadian foodies", "Dining and delivery spenders", "Flexible reward collectors"],
+    "typical_cardholder": "Young Canadian professional who spends heavily on dining, food delivery, and groceries and values flexible point transfers to travel partners",
+    "foreign_transaction_fee_pct": 2.5
+  },
+  {
+    "id": "dbs-altitude-sg",
+    "name": "DBS Altitude Visa Signature Card",
+    "issuer": "DBS Bank",
+    "region": "Singapore",
+    "currency": "SGD",
+    "annual_fee": 192,
+    "annual_fee_currency": "SGD",
+    "rewards_program": "DBS Points / Miles",
+    "earn_rates": {
+      "general": "1.2 miles per S$1 on general spending",
+      "category_specific": "3 miles per S$1 on online spend; 2 miles per S$1 on overseas and flight bookings"
+    },
+    "signup_bonus": {
+      "points": 10000,
+      "spend_requirement": 800,
+      "timeframe_months": 2
+    },
+    "perks": [
+      "Accelerated miles on online and overseas spending",
+      "Transfer miles to KrisFlyer, Asia Miles, and other airlines",
+      "Complimentary travel insurance",
+      "Visa Signature dining and lifestyle privileges",
+      "Instalment payment plans with DBS"
+    ],
+    "best_for": ["Singapore miles enthusiasts", "Online spenders", "Frequent international travellers from Singapore"],
+    "typical_cardholder": "Miles-obsessed Singaporean who maximises miles earn through online and overseas spending and transfers to KrisFlyer for Star Alliance redemptions",
+    "foreign_transaction_fee_pct": 3.25
+  },
+  {
+    "id": "amex-centurion-us",
+    "name": "American Express Centurion Card (Black Card)",
+    "issuer": "American Express",
+    "region": "United States",
+    "currency": "USD",
+    "annual_fee": 5000,
+    "annual_fee_currency": "USD",
+    "rewards_program": "Membership Rewards",
+    "earn_rates": {
+      "general": "1x Membership Rewards point per $1 on other purchases",
+      "category_specific": "1.5x on flights booked directly with airlines; transfer points 1:1 to 20+ airline and hotel partners"
+    },
+    "signup_bonus": null,
+    "perks": [
+      "Invitation only — requires high spending history",
+      "Centurion Lounge and partner lounge access globally",
+      "Dedicated Centurion concierge team",
+      "Complimentary hotel elite statuses (Hilton Diamond, Marriott Gold, etc.)",
+      "Fine Hotels + Resorts and Hotel Collection benefits",
+      "Global Entry and TSA PreCheck",
+      "Comprehensive travel and purchase protections",
+      "Event and experience access"
+    ],
+    "best_for": ["Ultra-high-net-worth individuals", "Exclusive experiences seekers", "Elite status collectors"],
+    "typical_cardholder": "Ultra-high-net-worth individual invited by Amex who spends six figures annually and values white-glove concierge service and exclusive access",
+    "foreign_transaction_fee_pct": 0
+  }
+]
