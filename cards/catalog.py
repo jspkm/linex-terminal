@@ -5,6 +5,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import firebase_admin
+from firebase_admin import credentials, firestore
+
+from config import FIREBASE_CREDENTIALS_PATH
+
 # Map countries to their broader regions for card matching
 REGION_MAP: dict[str, list[str]] = {
     "United Kingdom": ["United Kingdom", "Global"],
@@ -48,18 +53,43 @@ class CardCatalog:
     """Load and query the credit card knowledge base."""
 
     def __init__(self, cards_path: str | None = None):
-        if cards_path:
-            self.cards = self._load_cards(cards_path)
-        else:
-            self.cards = []
+        self.cards = self._load_cards(cards_path)
 
     @staticmethod
-    def _load_cards(path: str) -> list[dict]:
-        p = Path(path)
-        if not p.exists():
-            return []
-        with open(p) as f:
-            return json.load(f)
+    def _load_cards(path: str | None) -> list[dict]:
+        # Try Firebase first
+        if not firebase_admin._apps:
+            if FIREBASE_CREDENTIALS_PATH:
+                cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
+                firebase_admin.initialize_app(cred)
+            else:
+                firebase_admin.initialize_app()
+        
+        db = firestore.client()
+        docs = db.collection('known_cards').stream()
+        cards = []
+        
+        def _serialize_dates(obj):
+            from google.api_core.datetime_helpers import DatetimeWithNanoseconds
+            import datetime
+            if isinstance(obj, dict):
+                return {k: _serialize_dates(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [_serialize_dates(i) for i in obj]
+            elif isinstance(obj, (DatetimeWithNanoseconds, datetime.datetime)):
+                return obj.isoformat()
+            
+            return obj
+
+        for doc in docs:
+            data = doc.to_dict()
+            data = _serialize_dates(data)
+            
+            # Ensure the ID is present
+            if 'id' not in data:
+                data['id'] = doc.id
+            cards.append(data)
+        return cards
 
     def get_cards_for_region(self, country: str) -> list[dict]:
         """Return cards available in the user's region plus nearby/global cards.

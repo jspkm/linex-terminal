@@ -31,3 +31,14 @@ data/retail.csv
 # Streamlit
 .streamlit/
 secrets.toml
+
+# Node / Frontend
+node_modules/
+
+# Firebase configuration & keys
+*firebase-adminsdk*.json
+.firebase/
+firebase-debug.log
+
+# Mock users / Test Data
+data/test-users/
