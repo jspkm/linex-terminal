@@ -552,133 +552,149 @@ function ProfileGeneratorView({
                     Version: <span className="font-mono">{catalog.version}</span> · Source: {catalog.source} · K={catalog.k}
                     {catalog.total_training_population > 0 && ` · ${catalog.total_training_population.toLocaleString()} users`}
                   </div>
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-200 text-left text-slate-500">
-                        <th className="py-2 pr-2 w-8"></th>
-                        <th className="py-2 pr-4 font-medium">Profile</th>
-                        <th className="py-2 pr-4 font-medium">Description</th>
-                        <th className="py-2 pr-4 font-medium text-right">Portfolio LTV</th>
-                        <th className="py-2 pr-4 font-medium text-right">Population</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {catalog.profiles.map((p: any) => (
-                        <Fragment key={p.profile_id}>
-                          <tr
-                            className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors"
-                            onClick={() => setExpandedProfile(expandedProfile === p.profile_id ? null : p.profile_id)}
-                          >
-                            <td className="py-2.5 pr-2 text-slate-400">
-                              {expandedProfile === p.profile_id
-                                ? <ChevronDown className="h-4 w-4" />
-                                : <ChevronRight className="h-4 w-4" />
-                              }
-                            </td>
-                            <td className="py-2.5 pr-4">
-                              <div className="flex items-center gap-2.5">
-                                <span className={cn(
-                                  "inline-flex items-center justify-center rounded-full text-white text-xs font-bold w-8 h-8 shrink-0",
-                                  p.description?.toLowerCase().includes("return-heavy")
-                                    ? "bg-amber-600"
-                                    : "bg-slate-900"
-                                )}>
-                                  {p.profile_id}
-                                </span>
-                                {p.label && (
-                                  <span className="text-xs font-semibold text-slate-500">{p.label}</span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="py-2.5 pr-4 text-slate-700">{p.description}</td>
-                            <td className="py-2.5 pr-4 text-right font-mono text-slate-600">
-                              {p.portfolio_ltv != null ? `${p.portfolio_ltv < 0 ? '-' : ''}$${Math.abs(p.portfolio_ltv).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '—'}
-                            </td>
-                            <td className="py-2.5 pr-4 text-right font-mono text-slate-600">
-                              {p.population_count > 0 ? p.population_count.toLocaleString() : ''}
-                              <span className="text-slate-400 ml-1">({(p.population_share * 100).toFixed(1)}%)</span>
-                            </td>
-                          </tr>
-                          {expandedProfile === p.profile_id && (
-                            <tr key={`${p.profile_id}-detail`} className="bg-slate-50">
-                              <td colSpan={5} className="p-4">
-                                <div className="grid grid-cols-2 gap-6">
-                                  <div>
-                                    <h4 className="text-xs font-semibold text-slate-500 mb-3 uppercase tracking-wide">Centroid</h4>
-                                    <div className="space-y-3">
-                                      {BEHAVIORAL_AXES.map((ax) => {
-                                        const primaryFeat = ax.features[0];
-                                        const primaryVal = p.centroid[primaryFeat] ?? 0;
-                                        const auxFeatures = ax.features.slice(1).filter(f => f in p.centroid);
-                                        return (
-                                          <div key={ax.axis}>
-                                            <div className="flex items-center gap-2 text-xs mb-1">
-                                              <span className="w-40 truncate text-slate-800 font-bold">{ax.label}</span>
-                                              <div className="flex-1 bg-slate-200 rounded-full h-2 overflow-hidden">
-                                                <div className="bg-slate-900 h-full rounded-full transition-all" style={{ width: `${Math.max(0, Math.min(primaryVal * 10, 100))}%` }} />
-                                              </div>
-                                              <span className="font-mono text-slate-700 w-10 text-right font-semibold">{primaryVal.toFixed(2)}</span>
-                                            </div>
-                                            {auxFeatures.length > 0 && (
-                                              <div className="space-y-0.5 pl-3">
-                                                {auxFeatures.map((feat) => {
-                                                  const val = p.centroid[feat] ?? 0;
-                                                  return (
-                                                    <div key={feat} className="flex items-center gap-2 text-xs">
-                                                      <span className="w-[148px] truncate text-slate-400">{feat}</span>
-                                                      <div className="flex-1 bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                                                        <div className="bg-slate-400 h-full rounded-full transition-all" style={{ width: `${Math.max(0, Math.min(val * 10, 100))}%` }} />
-                                                      </div>
-                                                      <span className="font-mono text-slate-400 w-10 text-right">{val.toFixed(2)}</span>
-                                                    </div>
-                                                  );
-                                                })}
-                                              </div>
-                                            )}
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <h4 className="text-xs font-semibold text-slate-500 mb-3 uppercase tracking-wide">Dispersion (σ)</h4>
-                                    <div className="space-y-3">
-                                      {BEHAVIORAL_AXES.map((ax) => {
-                                        const primaryFeat = ax.features[0];
-                                        const primaryVal = p.dispersion[primaryFeat] ?? 0;
-                                        const auxFeatures = ax.features.slice(1).filter(f => f in p.dispersion);
-                                        return (
-                                          <div key={ax.axis}>
-                                            <div className="flex items-center gap-2 text-xs mb-1">
-                                              <span className="w-40 truncate text-slate-800 font-bold">{ax.label}</span>
-                                              <span className="font-mono text-slate-700 font-semibold">{primaryVal.toFixed(3)}</span>
-                                            </div>
-                                            {auxFeatures.length > 0 && (
-                                              <div className="space-y-0.5 pl-3">
-                                                {auxFeatures.map((feat) => {
-                                                  const val = p.dispersion[feat] ?? 0;
-                                                  return (
-                                                    <div key={feat} className="flex items-center gap-2 text-xs">
-                                                      <span className="w-[148px] truncate text-slate-400">{feat}</span>
-                                                      <span className="font-mono text-slate-400">{val.toFixed(3)}</span>
-                                                    </div>
-                                                  );
-                                                })}
-                                              </div>
-                                            )}
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-200 text-left text-slate-500">
+                          <th className="py-2 pr-2 w-8"></th>
+                          <th className="py-2 pr-4 font-medium">Profile</th>
+                          <th className="py-2 pr-4 font-medium">Description</th>
+                          <th className="py-2 pr-4 font-medium text-right">Portfolio LTV</th>
+                          <th className="py-2 pr-4 font-medium text-right">Population</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {catalog.profiles.map((p: any) => (
+                          <Fragment key={p.profile_id}>
+                            <tr
+                              className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors"
+                              onClick={() => setExpandedProfile(expandedProfile === p.profile_id ? null : p.profile_id)}
+                            >
+                              <td className="py-2.5 pr-2 text-slate-400">
+                                {expandedProfile === p.profile_id
+                                  ? <ChevronDown className="h-4 w-4" />
+                                  : <ChevronRight className="h-4 w-4" />
+                                }
+                              </td>
+                              <td className="py-2.5 pr-4">
+                                <div className="flex items-center gap-2.5">
+                                  <span className={cn(
+                                    "inline-flex items-center justify-center rounded-full text-white text-xs font-bold w-8 h-8 shrink-0",
+                                    p.description?.toLowerCase().includes("return-heavy")
+                                      ? "bg-amber-600"
+                                      : "bg-slate-900"
+                                  )}>
+                                    {p.profile_id}
+                                  </span>
+                                  {p.label && (
+                                    <span className="text-xs font-semibold text-slate-500">{p.label}</span>
+                                  )}
                                 </div>
                               </td>
+                              <td className="py-2.5 pr-4 text-slate-700">{p.description}</td>
+                              <td className="py-2.5 pr-4 text-right font-mono text-slate-600">
+                                {p.portfolio_ltv != null ? `${p.portfolio_ltv < 0 ? '-' : ''}$${Math.abs(p.portfolio_ltv).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '—'}
+                              </td>
+                              <td className="py-2.5 pr-4 text-right font-mono text-slate-600">
+                                {p.population_count > 0 ? p.population_count.toLocaleString() : ''}
+                                <span className="text-slate-400 ml-1">({(p.population_share * 100).toFixed(1)}%)</span>
+                              </td>
                             </tr>
-                          )}
-                        </Fragment>
-                      ))}
-                    </tbody>
-                  </table>
+                            {expandedProfile === p.profile_id && (
+                              <tr key={`${p.profile_id}-detail`} className="bg-slate-50">
+                                <td colSpan={5} className="p-4">
+                                  <div className="grid grid-cols-2 gap-6">
+                                    <div>
+                                      <h4 className="text-xs font-semibold text-slate-500 mb-3 uppercase tracking-wide">Centroid</h4>
+                                      <div className="space-y-3">
+                                        {BEHAVIORAL_AXES.map((ax) => {
+                                          const primaryFeat = ax.features[0];
+                                          const primaryVal = p.centroid[primaryFeat] ?? 0;
+                                          const auxFeatures = ax.features.slice(1).filter(f => f in p.centroid);
+                                          return (
+                                            <div key={ax.axis}>
+                                              <div className="flex items-center gap-2 text-xs mb-1">
+                                                <span className="w-40 truncate text-slate-800 font-bold">{ax.label}</span>
+                                                <div className="flex-1 bg-slate-200 rounded-full h-2 overflow-hidden">
+                                                  <div className="bg-slate-900 h-full rounded-full transition-all" style={{ width: `${Math.max(0, Math.min(primaryVal * 10, 100))}%` }} />
+                                                </div>
+                                                <span className="font-mono text-slate-700 w-10 text-right font-semibold">{primaryVal.toFixed(2)}</span>
+                                              </div>
+                                              {auxFeatures.length > 0 && (
+                                                <div className="space-y-0.5 pl-3">
+                                                  {auxFeatures.map((feat) => {
+                                                    const val = p.centroid[feat] ?? 0;
+                                                    return (
+                                                      <div key={feat} className="flex items-center gap-2 text-xs">
+                                                        <span className="w-[148px] truncate text-slate-400">{feat}</span>
+                                                        <div className="flex-1 bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                                                          <div className="bg-slate-400 h-full rounded-full transition-all" style={{ width: `${Math.max(0, Math.min(val * 10, 100))}%` }} />
+                                                        </div>
+                                                        <span className="font-mono text-slate-400 w-10 text-right">{val.toFixed(2)}</span>
+                                                      </div>
+                                                    );
+                                                  })}
+                                                </div>
+                                              )}
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <h4 className="text-xs font-semibold text-slate-500 mb-3 uppercase tracking-wide">Dispersion (σ)</h4>
+                                      <div className="space-y-3">
+                                        {BEHAVIORAL_AXES.map((ax) => {
+                                          const primaryFeat = ax.features[0];
+                                          const primaryVal = p.dispersion[primaryFeat] ?? 0;
+                                          const auxFeatures = ax.features.slice(1).filter(f => f in p.dispersion);
+                                          return (
+                                            <div key={ax.axis}>
+                                              <div className="flex items-center gap-2 text-xs mb-1">
+                                                <span className="w-40 truncate text-slate-800 font-bold">{ax.label}</span>
+                                                <span className="font-mono text-slate-700 font-semibold">{primaryVal.toFixed(3)}</span>
+                                              </div>
+                                              {auxFeatures.length > 0 && (
+                                                <div className="space-y-0.5 pl-3">
+                                                  {auxFeatures.map((feat) => {
+                                                    const val = p.dispersion[feat] ?? 0;
+                                                    return (
+                                                      <div key={feat} className="flex items-center gap-2 text-xs">
+                                                        <span className="w-[148px] truncate text-slate-400">{feat}</span>
+                                                        <span className="font-mono text-slate-400">{val.toFixed(3)}</span>
+                                                      </div>
+                                                    );
+                                                  })}
+                                                </div>
+                                              )}
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </Fragment>
+                        ))}
+                        {/* Total Portfolio LTV Row */}
+                        <tr className="bg-slate-50/50">
+                          <td className="py-4 pr-2"></td>
+                          <td className="py-4 pr-4" colSpan={2}>
+                            <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Total Portfolio LTV</span>
+                          </td>
+                          <td className="py-4 pr-4 text-right font-mono text-slate-900 font-bold border-t border-slate-200">
+                            {(() => {
+                              const totalLTV = catalog.profiles.reduce((sum: number, p: any) => sum + (p.portfolio_ltv || 0), 0);
+                              return `${totalLTV < 0 ? '-' : ''}$${Math.abs(totalLTV).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+                            })()}
+                          </td>
+                          <td className="py-4 pr-4"></td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               ) : (
                 <div className="text-sm text-slate-500 py-8 text-center">
