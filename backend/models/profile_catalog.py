@@ -51,31 +51,9 @@ class ProfileAssignment(BaseModel):
 
     customer_id: str = ""
     profile_id: str = ""
+    profile_label: str = ""
     confidence: float = 0.0
     feature_vector: dict[str, float] = {}
     alternates: list[dict] = []  # [{profile_id, distance}, ...]
     catalog_version: str = ""
     evaluation_timestamp: datetime = Field(default_factory=datetime.utcnow)
-
-
-class TransitionMatrix(BaseModel):
-    """Profile transition probability matrix."""
-
-    profile_ids: list[str] = []  # ordered profile IDs
-    matrix: list[list[float]] = []  # T[i][j] = P(i → j), row-normalized
-    raw_counts: list[list[int]] = []  # raw transition counts before smoothing
-    smoothing_alpha: float = 0.0  # Laplace smoothing parameter used
-    smoothed: bool = False  # whether smoothing was applied
-    time_window: str = "Q"  # "Q" = quarterly, "M" = monthly
-    catalog_version: str = ""
-    num_users: int = 0
-    num_transitions: int = 0
-
-
-class SimulationResult(BaseModel):
-    """Result of a multi-period portfolio simulation."""
-
-    periods: int = 0
-    profile_ids: list[str] = []
-    population_vectors: list[list[float]] = []  # [period][profile_idx] = share
-    catalog_version: str = ""

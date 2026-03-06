@@ -20,7 +20,7 @@ const PRIMARY_FEATURES = new Set(BEHAVIORAL_AXES.map(a => a.features[0]));
 
 type View = "profiler" | "generator";
 type ProfilerTab = "test" | "upload";
-type GeneratorTab = "train" | "catalog" | "assign" | "transitions" | "simulate";
+type GeneratorTab = "train" | "catalog";
 
 export default function Home() {
   const [activeView, setActiveView] = useState<View>("profiler");
@@ -51,11 +51,6 @@ export default function Home() {
   const [catalog, setCatalog] = useState<any>(null);
   const [catalogList, setCatalogList] = useState<any[]>([]);
   const [selectedCatalogVersion, setSelectedCatalogVersion] = useState("");
-  const [assignment, setAssignment] = useState<any>(null);
-  const [assignUserId, setAssignUserId] = useState("");
-  const [transitionMatrix, setTransitionMatrix] = useState<any>(null);
-  const [simulation, setSimulation] = useState<any>(null);
-  const [simPeriods, setSimPeriods] = useState(5);
   const [expandedProfile, setExpandedProfile] = useState<string | null>(null);
 
   // Load test user IDs on mount
@@ -193,91 +188,21 @@ export default function Home() {
     finally { setGenLoading(false); }
   };
 
-  const assignProfile = async () => {
-    if (!assignUserId) return;
-    setGenLoading(true);
-    setGenError("");
-    try {
-      const res = await fetch(`${CLOUD_FUNCTION_URL}/assign_profile`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          user_id: assignUserId,
-          catalog_version: selectedCatalogVersion,
-        }),
-      });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || "Assignment failed");
-      }
-      const data = await res.json();
-      setAssignment(data);
-    } catch (err: any) {
-      setGenError(err.message || "Assignment failed");
-    } finally {
-      setGenLoading(false);
-    }
-  };
-
-  const buildTransitionMatrix = async () => {
-    setGenLoading(true);
-    setGenError("");
-    try {
-      const res = await fetch(`${CLOUD_FUNCTION_URL}/build_transition_matrix`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          catalog_version: selectedCatalogVersion,
-          source: trainSource,
-        }),
-      });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || "Failed to build transition matrix");
-      }
-      const data = await res.json();
-      setTransitionMatrix(data);
-    } catch (err: any) {
-      setGenError(err.message || "Failed to build transition matrix");
-    } finally {
-      setGenLoading(false);
-    }
-  };
-
-  const runSimulation = async () => {
-    if (!catalog || !transitionMatrix) return;
-    setGenLoading(true);
-    setGenError("");
-    try {
-      const initialPop = catalog.profiles.map((p: any) => p.population_share);
-      const res = await fetch(`${CLOUD_FUNCTION_URL}/run_simulation`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          initial_population: initialPop,
-          transition_matrix: transitionMatrix,
-          periods: simPeriods,
-        }),
-      });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || "Simulation failed");
-      }
-      const data = await res.json();
-      setSimulation(data);
-    } catch (err: any) {
-      setGenError(err.message || "Simulation failed");
-    } finally {
-      setGenLoading(false);
-    }
-  };
-
   // Load catalog list when switching to generator view
   useEffect(() => {
     if (activeView === "generator") {
       fetchCatalogList();
     }
   }, [activeView]);
+
+  // Always show the latest catalog when the Catalog tab is selected
+  useEffect(() => {
+    if (activeView === "generator" && generatorTab === "catalog") {
+      loadCatalog();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeView, generatorTab]);
+
 
   return (
     <div className="flex min-h-screen bg-[#F3F4F6]">
@@ -468,6 +393,13 @@ export default function Home() {
                         {formatToon(results.profile, results.card_recommendations)}
                       </pre>
                     </div>
+
+                    {/* Duplicate Profile Assignment UI */}
+                    {results.assignment && (
+                      <div className="px-2 pt-4 border-t border-slate-200">
+                        <ProfileAssignmentView assignment={results.assignment} />
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -489,17 +421,6 @@ export default function Home() {
                 loadCatalog={loadCatalog}
                 expandedProfile={expandedProfile}
                 setExpandedProfile={setExpandedProfile}
-                assignUserId={assignUserId}
-                setAssignUserId={setAssignUserId}
-                assignProfile={assignProfile}
-                assignment={assignment}
-                testUserIds={testUserIds}
-                buildTransitionMatrix={buildTransitionMatrix}
-                transitionMatrix={transitionMatrix}
-                simPeriods={simPeriods}
-                setSimPeriods={setSimPeriods}
-                runSimulation={runSimulation}
-                simulation={simulation}
               />
             ) : null}
           </div>
@@ -517,16 +438,10 @@ function ProfileGeneratorView({
   trainSource, setTrainSource, trainK, setTrainK, trainProfiles,
   catalog, catalogList, selectedCatalogVersion, setSelectedCatalogVersion, loadCatalog,
   expandedProfile, setExpandedProfile,
-  assignUserId, setAssignUserId, assignProfile, assignment, testUserIds,
-  buildTransitionMatrix, transitionMatrix,
-  simPeriods, setSimPeriods, runSimulation, simulation,
 }: any) {
   const tabs: { key: string; label: string }[] = [
     { key: "train", label: "Training" },
     { key: "catalog", label: "Catalog" },
-    { key: "assign", label: "Assignment" },
-    { key: "transitions", label: "Transitions" },
-    { key: "simulate", label: "Simulation" },
   ];
 
   return (
@@ -772,367 +687,8 @@ function ProfileGeneratorView({
               )}
             </div>
           )}
-
-          {/* Assignment Panel */}
-          {generatorTab === "assign" && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900 mb-1">Profile Assignment</h3>
-                <p className="text-sm text-slate-500">Assign a user to their best-matching canonical profile.</p>
-              </div>
-
-              <div className="flex gap-4 items-end">
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-slate-700 mb-2">User ID</label>
-                  <select
-                    value={assignUserId}
-                    onChange={(e) => setAssignUserId(e.target.value)}
-                    className="rounded-md border px-3 py-2 text-sm bg-white w-full"
-                  >
-                    <option value="">Select a user...</option>
-                    {testUserIds.map((id: string) => (
-                      <option key={id} value={id}>User {id}</option>
-                    ))}
-                  </select>
-                </div>
-                <button
-                  onClick={assignProfile}
-                  disabled={!assignUserId || genLoading}
-                  className="rounded-md bg-black px-6 py-2 text-sm font-semibold text-white hover:opacity-80 disabled:opacity-50 flex items-center gap-2 shrink-0"
-                >
-                  {genLoading && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Assign
-                </button>
-              </div>
-
-              {assignment && (
-                <div className="rounded-lg border border-slate-200 p-5 space-y-4">
-                  <div className="flex items-center gap-4">
-                    <span className="inline-flex items-center justify-center rounded-full bg-slate-900 text-white text-sm font-bold w-12 h-12">
-                      {assignment.profile_id}
-                    </span>
-                    <div>
-                      <div className="text-lg font-semibold text-slate-900">
-                        Profile {assignment.profile_id}
-                      </div>
-                      <div className="text-sm text-slate-500">
-                        Confidence: <span className="font-semibold text-slate-700">{(assignment.confidence * 100).toFixed(1)}%</span>
-                        {' · '}Customer: {assignment.customer_id}
-                      </div>
-                    </div>
-                  </div>
-
-                  {assignment.alternates && assignment.alternates.length > 0 && (
-                    <div>
-                      <h4 className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">Alternate Candidates</h4>
-                      <div className="flex gap-3">
-                        {assignment.alternates.map((alt: any, i: number) => (
-                          <div key={i} className="rounded-md border border-slate-200 px-3 py-2 text-sm">
-                            <span className="font-semibold">{alt.profile_id}</span>
-                            <span className="text-slate-400 ml-2">d={alt.distance}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {assignment.feature_vector && (
-                    <div>
-                      <h4 className="text-xs font-semibold text-slate-500 mb-3 uppercase tracking-wide">Feature Vector (normalized)</h4>
-                      <div className="grid grid-cols-2 gap-4">
-                        {BEHAVIORAL_AXES.map((ax) => {
-                          const primaryFeat = ax.features[0];
-                          const primaryVal = assignment.feature_vector[primaryFeat] ?? 0;
-                          const auxFeatures = ax.features.slice(1).filter(f => f in assignment.feature_vector);
-                          return (
-                            <div key={ax.axis}>
-                              <div className="flex items-center gap-2 text-xs mb-1">
-                                <span className="w-40 truncate text-slate-800 font-bold">{ax.label}</span>
-                                <div className="flex-1 bg-slate-200 rounded-full h-1.5 overflow-hidden">
-                                  <div className="bg-blue-600 h-full rounded-full transition-all" style={{ width: `${Math.max(0, Math.min(primaryVal * 10, 100))}%` }} />
-                                </div>
-                                <span className="font-mono text-slate-700 w-10 text-right font-semibold">{primaryVal.toFixed(2)}</span>
-                              </div>
-                              {auxFeatures.length > 0 && (
-                                <div className="space-y-0.5 pl-3">
-                                  {auxFeatures.map((feat) => {
-                                    const val = assignment.feature_vector[feat] ?? 0;
-                                    return (
-                                      <div key={feat} className="flex items-center gap-2 text-xs">
-                                        <span className="w-[148px] truncate text-slate-400">{feat}</span>
-                                        <div className="flex-1 bg-slate-100 rounded-full h-1 overflow-hidden">
-                                          <div className="bg-blue-300 h-full rounded-full transition-all" style={{ width: `${Math.max(0, Math.min(val * 10, 100))}%` }} />
-                                        </div>
-                                        <span className="font-mono text-slate-400 w-10 text-right">{val.toFixed(2)}</span>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Transition Matrix Panel */}
-          {generatorTab === "transitions" && (
-            <TransitionsPanel
-              genLoading={genLoading}
-              selectedCatalogVersion={selectedCatalogVersion}
-              buildTransitionMatrix={buildTransitionMatrix}
-              transitionMatrix={transitionMatrix}
-            />
-          )}
-
-          {/* Simulation Panel */}
-          {generatorTab === "simulate" && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900 mb-1">Portfolio Simulation</h3>
-                <p className="text-sm text-slate-500">
-                  Project portfolio evolution using π(t+1) = π(t) × T
-                </p>
-              </div>
-
-              <div className="flex gap-4 items-end">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">Periods</label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={20}
-                    value={simPeriods}
-                    onChange={(e) => setSimPeriods(parseInt(e.target.value) || 5)}
-                    className="rounded-md border px-3 py-2 text-sm bg-white w-24"
-                  />
-                </div>
-                <button
-                  onClick={runSimulation}
-                  disabled={!catalog || !transitionMatrix || genLoading}
-                  className="rounded-md bg-black px-6 py-2 text-sm font-semibold text-white hover:opacity-80 disabled:opacity-50 flex items-center gap-2"
-                >
-                  {genLoading && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Run Simulation
-                </button>
-              </div>
-
-              {!catalog || !transitionMatrix ? (
-                <div className="text-sm text-slate-500 py-8 text-center">
-                  Train profiles and build a transition matrix first.
-                </div>
-              ) : simulation ? (
-                <div className="space-y-4">
-                  <div className="text-xs text-slate-400">
-                    {simulation.periods} periods · {simulation.profile_ids.length} profiles
-                  </div>
-
-                  {/* Population Evolution Table */}
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="border-b border-slate-200">
-                          <th className="py-2 pr-3 text-left text-slate-500 font-medium">Period</th>
-                          {simulation.profile_ids.map((pid: string) => (
-                            <th key={pid} className="py-2 px-2 text-center text-slate-500 font-medium">{pid}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {simulation.population_vectors.map((vec: number[], period: number) => (
-                          <tr key={period} className="border-b border-slate-100">
-                            <td className="py-2 pr-3 font-medium text-slate-600">
-                              {period === 0 ? 'Initial' : `t+${period}`}
-                            </td>
-                            {vec.map((val: number, j: number) => (
-                              <td key={j} className="py-2 px-2 text-center font-mono text-slate-600">
-                                {(val * 100).toFixed(1)}%
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Visual Population Bars */}
-                  <div className="space-y-3">
-                    <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Population Distribution Over Time</h4>
-                    {simulation.population_vectors.map((vec: number[], period: number) => (
-                      <div key={period} className="flex items-center gap-3">
-                        <span className="text-xs text-slate-500 w-14 shrink-0 text-right font-medium">
-                          {period === 0 ? 'Initial' : `t+${period}`}
-                        </span>
-                        <div className="flex-1 flex h-6 rounded-md overflow-hidden">
-                          {vec.map((val: number, j: number) => (
-                            val > 0.005 && (
-                              <div
-                                key={j}
-                                className="flex items-center justify-center text-[9px] font-semibold text-white transition-all duration-500"
-                                style={{
-                                  width: `${val * 100}%`,
-                                  backgroundColor: PROFILE_COLORS[j % PROFILE_COLORS.length],
-                                }}
-                                title={`${simulation.profile_ids[j]}: ${(val * 100).toFixed(1)}%`}
-                              >
-                                {val > 0.05 ? simulation.profile_ids[j] : ''}
-                              </div>
-                            )
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          )}
         </div>
       </div>
-    </div>
-  );
-}
-
-// ========================================================
-// Transitions Panel (FR-6)
-// ========================================================
-function TransitionsPanel({ genLoading, selectedCatalogVersion, buildTransitionMatrix, transitionMatrix }: any) {
-  const [showRawCounts, setShowRawCounts] = useState(false);
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-slate-900 mb-1">Transition Matrix</h3>
-          <p className="text-sm text-slate-500">Profile migration probabilities between time periods.</p>
-        </div>
-        <button
-          onClick={buildTransitionMatrix}
-          disabled={!selectedCatalogVersion || genLoading}
-          className="rounded-md bg-black px-6 py-2 text-sm font-semibold text-white hover:opacity-80 disabled:opacity-50 flex items-center gap-2"
-        >
-          {genLoading && <Loader2 className="h-4 w-4 animate-spin" />}
-          Build Matrix
-        </button>
-      </div>
-
-      {transitionMatrix ? (
-        <div className="space-y-4">
-          {/* Metadata row */}
-          <div className="flex items-center gap-4 flex-wrap text-xs text-slate-400">
-            <span>{transitionMatrix.num_users} users</span>
-            <span>·</span>
-            <span>{transitionMatrix.num_transitions} transitions</span>
-            <span>·</span>
-            <span>Window: {transitionMatrix.time_window === "Q" ? "Quarterly" : "Monthly"}</span>
-            {transitionMatrix.smoothed && (
-              <>
-                <span>·</span>
-                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-700 px-2 py-0.5 font-medium">
-                  Smoothed (α={transitionMatrix.smoothing_alpha})
-                </span>
-              </>
-            )}
-          </div>
-
-          {/* Toggle raw/probability */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowRawCounts(false)}
-              className={cn(
-                "px-3 py-1 rounded-md text-xs font-medium transition-colors",
-                !showRawCounts ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              )}
-            >
-              Probabilities
-            </button>
-            <button
-              onClick={() => setShowRawCounts(true)}
-              className={cn(
-                "px-3 py-1 rounded-md text-xs font-medium transition-colors",
-                showRawCounts ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              )}
-            >
-              Raw Counts
-            </button>
-          </div>
-
-          {/* Matrix table */}
-          <div className="overflow-x-auto">
-            <table className="text-xs border-collapse">
-              <thead>
-                <tr>
-                  <th className="p-2 text-slate-500 font-medium border-b border-r border-slate-200">From \ To</th>
-                  {transitionMatrix.profile_ids.map((pid: string) => (
-                    <th key={pid} className="p-2 text-center text-slate-500 font-medium border-b border-slate-200 min-w-[52px]">
-                      {pid}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {(showRawCounts ? transitionMatrix.raw_counts : transitionMatrix.matrix).map((row: number[], i: number) => (
-                  <tr key={i}>
-                    <td className="p-2 font-medium text-slate-600 border-r border-slate-200">{transitionMatrix.profile_ids[i]}</td>
-                    {row.map((val: number, j: number) => {
-                      if (showRawCounts) {
-                        const maxCount = Math.max(...transitionMatrix.raw_counts.flat(), 1);
-                        const intensity = Math.min(val / maxCount, 1);
-                        return (
-                          <td
-                            key={j}
-                            className="p-2 text-center font-mono border border-slate-100"
-                            style={{
-                              backgroundColor: val > 0 ? `rgba(59, 130, 246, ${intensity * 0.8})` : 'transparent',
-                              color: intensity > 0.5 ? 'white' : '#475569',
-                            }}
-                          >
-                            {val}
-                          </td>
-                        );
-                      }
-                      // Probability view
-                      const intensity = Math.min(val * 2, 1);
-                      const bg = i === j
-                        ? `rgba(59, 130, 246, ${intensity})`
-                        : `rgba(239, 68, 68, ${intensity * 0.7})`;
-                      return (
-                        <td
-                          key={j}
-                          className="p-2 text-center font-mono border border-slate-100"
-                          style={{
-                            backgroundColor: val > 0.01 ? bg : 'transparent',
-                            color: intensity > 0.5 ? 'white' : '#475569',
-                          }}
-                        >
-                          {val > 0.01 ? val.toFixed(2) : '—'}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Smoothing details */}
-          {transitionMatrix.smoothed && (
-            <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
-              <strong>Laplace smoothing applied</strong> (α = {transitionMatrix.smoothing_alpha}).
-              {' '}Sparse transition cells were smoothed to avoid zero-probability transitions. The raw counts above show the unsmoothed observations.
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="text-sm text-slate-500 py-8 text-center">
-          Click &ldquo;Build Matrix&rdquo; to compute transition probabilities from the training data.
-        </div>
-      )}
     </div>
   );
 }
@@ -1251,3 +807,82 @@ function InlineAnalyzingIndicator() {
     </div>
   );
 }
+
+// ========================================================
+// Reusable Assignment View
+// ========================================================
+export function ProfileAssignmentView({ assignment }: { assignment: any }) {
+  return (
+    <div className="rounded-lg border border-slate-200 p-5 space-y-4">
+      <div className="flex items-center gap-4">
+        <span className="inline-flex items-center justify-center rounded-full bg-slate-900 text-white text-sm font-bold w-12 h-12">
+          {assignment.profile_id}
+        </span>
+        <div>
+          <div className="text-lg font-semibold text-slate-900">
+            {assignment.profile_label || `Profile ${assignment.profile_id}`}
+          </div>
+          <div className="text-sm text-slate-500">
+            Confidence: <span className="font-semibold text-slate-700">{(assignment.confidence * 100).toFixed(1)}%</span>
+            {' · '}Customer: {assignment.customer_id}
+          </div>
+        </div>
+      </div>
+
+      {assignment.alternates && assignment.alternates.length > 0 && (
+        <div>
+          <h4 className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">Alternate Candidates</h4>
+          <div className="flex gap-3">
+            {assignment.alternates.map((alt: any, i: number) => (
+              <div key={i} className="rounded-md border border-slate-200 px-3 py-2 text-sm">
+                <span className="font-semibold">{alt.profile_id}</span>
+                <span className="text-slate-400 ml-2">d={alt.distance}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {assignment.feature_vector && (
+        <div>
+          <h4 className="text-xs font-semibold text-slate-500 mb-3 uppercase tracking-wide">Feature Vector (normalized)</h4>
+          <div className="grid grid-cols-2 gap-4">
+            {BEHAVIORAL_AXES.map((ax) => {
+              const primaryFeat = ax.features[0];
+              const primaryVal = assignment.feature_vector[primaryFeat] ?? 0;
+              const auxFeatures = ax.features.slice(1).filter((f: string) => f in assignment.feature_vector);
+              return (
+                <div key={ax.axis}>
+                  <div className="flex items-center gap-2 text-xs mb-1">
+                    <span className="w-40 truncate text-slate-800 font-bold">{ax.label}</span>
+                    <div className="flex-1 bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                      <div className="bg-blue-600 h-full rounded-full transition-all" style={{ width: `${Math.max(0, Math.min(primaryVal * 10, 100))}%` }} />
+                    </div>
+                    <span className="font-mono text-slate-700 w-10 text-right font-semibold">{primaryVal.toFixed(2)}</span>
+                  </div>
+                  {auxFeatures.length > 0 && (
+                    <div className="space-y-0.5 pl-3">
+                      {auxFeatures.map((feat: string) => {
+                        const val = assignment.feature_vector[feat] ?? 0;
+                        return (
+                          <div key={feat} className="flex items-center gap-2 text-xs">
+                            <span className="w-[148px] truncate text-slate-400">{feat}</span>
+                            <div className="flex-1 bg-slate-100 rounded-full h-1 overflow-hidden">
+                              <div className="bg-blue-300 h-full rounded-full transition-all" style={{ width: `${Math.max(0, Math.min(val * 10, 100))}%` }} />
+                            </div>
+                            <span className="font-mono text-slate-400 w-10 text-right">{val.toFixed(2)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+

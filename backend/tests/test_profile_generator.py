@@ -11,7 +11,7 @@ import pytest
 
 from models.transaction import Transaction, UserTransactions
 from models.profile_catalog import (
-    ScalingParams, CanonicalProfile, ProfileCatalog, TransitionMatrix,
+    ScalingParams, CanonicalProfile, ProfileCatalog,
 )
 from profile_generator.feature_derivation import derive_user_features, derive_batch_features
 from profile_generator.feature_derivation import (
@@ -20,7 +20,6 @@ from profile_generator.feature_derivation import (
 from profile_generator.feature_transform import detect_and_transform, normalize, fit_transform
 from profile_generator.trainer import train_profiles
 from profile_generator.assigner import assign_profile
-from profile_generator.simulator import run_simulation
 
 
 def _make_txns(amounts, days_offsets, cid="test_user"):
@@ -183,69 +182,6 @@ class TestAssigner:
         assert assignment.confidence > 0
         assert len(assignment.alternates) > 0
 
-
-# ---- Transition Matrix ----
-
-class TestTransitionMatrix:
-    def test_rows_sum_to_one(self):
-        """All rows in the transition matrix must sum to 1.0."""
-        tm = TransitionMatrix(
-            profile_ids=["P0", "P1", "P2"],
-            matrix=[
-                [0.5, 0.3, 0.2],
-                [0.1, 0.7, 0.2],
-                [0.3, 0.3, 0.4],
-            ],
-        )
-        for row in tm.matrix:
-            assert sum(row) == pytest.approx(1.0, abs=0.001)
-
-
-# ---- Simulator ----
-
-class TestSimulator:
-    def test_identity_matrix(self):
-        """With identity transition matrix, population should not change."""
-        tm = TransitionMatrix(
-            profile_ids=["P0", "P1", "P2"],
-            matrix=[
-                [1.0, 0.0, 0.0],
-                [0.0, 1.0, 0.0],
-                [0.0, 0.0, 1.0],
-            ],
-        )
-        result = run_simulation([0.5, 0.3, 0.2], tm, periods=5)
-        assert result.periods == 5
-        # Check all periods have same population
-        for vec in result.population_vectors:
-            assert vec[0] == pytest.approx(0.5, abs=0.001)
-            assert vec[1] == pytest.approx(0.3, abs=0.001)
-            assert vec[2] == pytest.approx(0.2, abs=0.001)
-
-    def test_convergence(self):
-        """Population should converge toward steady state."""
-        tm = TransitionMatrix(
-            profile_ids=["P0", "P1"],
-            matrix=[
-                [0.9, 0.1],
-                [0.2, 0.8],
-            ],
-        )
-        result = run_simulation([1.0, 0.0], tm, periods=50)
-        final = result.population_vectors[-1]
-        # Should converge to [2/3, 1/3]
-        assert final[0] == pytest.approx(2 / 3, abs=0.01)
-        assert final[1] == pytest.approx(1 / 3, abs=0.01)
-
-    def test_deterministic(self):
-        """Simulation should produce deterministic results."""
-        tm = TransitionMatrix(
-            profile_ids=["P0", "P1"],
-            matrix=[[0.7, 0.3], [0.4, 0.6]],
-        )
-        r1 = run_simulation([0.6, 0.4], tm, periods=3)
-        r2 = run_simulation([0.6, 0.4], tm, periods=3)
-        assert r1.population_vectors == r2.population_vectors
 
 # ---- FR-2A: Behavioral Axes ----
 

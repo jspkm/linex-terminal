@@ -329,7 +329,8 @@ def train_profiles(
         feature_df.to_csv().encode()
     ).hexdigest()[:12]
 
-    version = f"v_{config_hash}_{dataset_hash}"
+    timestamp_str = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    version = f"v_{timestamp_str}_{config_hash}_{dataset_hash}"
 
     return ProfileCatalog(
         version=version,

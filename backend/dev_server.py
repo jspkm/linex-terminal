@@ -159,6 +159,7 @@ def analyze_test_user():
             "profile": profile.model_dump(),
             "features": features.model_dump(mode="json"),
             "card_recommendations": rec.model_dump(),
+            "assignment": assignment.model_dump(mode="json") if assignment else None,
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -194,6 +195,7 @@ def analyze_transactions():
             "profile": profile.model_dump(),
             "features": features.model_dump(mode="json"),
             "card_recommendations": rec.model_dump(),
+            "assignment": assignment.model_dump(mode="json") if assignment else None,
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500

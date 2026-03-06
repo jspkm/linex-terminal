@@ -86,9 +86,13 @@ def assign_profile(
     # Feature vector (normalized values) as dict
     feature_vector = {feat: round(float(v), 4) for feat, v in zip(feature_names, user_vec_all)}
 
+    best_profile = next((p for p in catalog.profiles if p.profile_id == best_id), None)
+    best_label = best_profile.label if best_profile else ""
+
     return ProfileAssignment(
         customer_id=user_txns.customer_id,
         profile_id=best_id,
+        profile_label=best_label,
         confidence=round(confidence, 4),
         feature_vector=feature_vector,
         alternates=alternates,
