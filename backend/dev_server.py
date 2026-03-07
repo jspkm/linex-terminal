@@ -279,9 +279,13 @@ from profile_generator.feature_derivation import derive_batch_features
 from profile_generator.trainer import train_profiles as _train_profiles
 from profile_generator.assigner import assign_profile as _assign_profile
 from profile_generator.versioning import (
-    save_catalog, load_catalog, list_catalogs, get_latest_catalog, fork_catalog,
+    save_catalog, load_catalog, list_catalogs, get_latest_catalog, fork_catalog, delete_catalog,
 )
-from profile_generator.experiment import start_experiment, get_experiment_status
+from profile_generator.experiment import (
+    start_experiment, get_experiment_status,
+    cancel_experiment, save_experiment, delete_experiment,
+    list_experiments, load_experiment,
+)
 from models.transaction import UserTransactions
 
 
@@ -490,6 +494,65 @@ def get_experiment_status_endpoint(experiment_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/linexonewhitelabeler/us-central1/list_experiments", methods=["GET"])
+def list_experiments_endpoint():
+    try:
+        catalog_version = request.args.get("catalog_version")
+        experiments = list_experiments(catalog_version or None)
+        return jsonify({"experiments": experiments})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/linexonewhitelabeler/us-central1/load_experiment/<experiment_id>", methods=["GET"])
+def load_experiment_endpoint(experiment_id):
+    try:
+        state = load_experiment(experiment_id)
+        if not state:
+            return jsonify({"error": "Experiment not found"}), 404
+        return jsonify(state.model_dump(mode="json"))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/linexonewhitelabeler/us-central1/cancel_experiment/<experiment_id>", methods=["POST"])
+def cancel_experiment_endpoint(experiment_id):
+    try:
+        ok = cancel_experiment(experiment_id)
+        if not ok:
+            return jsonify({"error": "Experiment not found or not running"}), 404
+        return jsonify({"cancelled": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/linexonewhitelabeler/us-central1/save_experiment/<experiment_id>", methods=["POST"])
+def save_experiment_endpoint(experiment_id):
+    try:
+        path = save_experiment(experiment_id)
+        if not path:
+            return jsonify({"error": "Experiment not found or not in a saveable state"}), 404
+        return jsonify({"saved": True, "path": path})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/linexonewhitelabeler/us-central1/delete_experiment/<experiment_id>", methods=["DELETE"])
+def delete_experiment_endpoint(experiment_id):
+    try:
+        ok = delete_experiment(experiment_id)
+        if not ok:
+            return jsonify({"error": "Experiment not found"}), 404
+        return jsonify({"deleted": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/linexonewhitelabeler/us-central1/delete_catalog/<version>", methods=["DELETE"])
+def delete_catalog_endpoint(version):
+    try:
+        ok = delete_catalog(version)
+        if not ok:
+            return jsonify({"error": "Catalog not found"}), 404
+        return jsonify({"deleted": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == "__main__":
     print(f"Starting local dev server on http://127.0.0.1:5050 (model: {MODEL})")
     print("Functions available:")
@@ -506,5 +569,9 @@ if __name__ == "__main__":
     print("  - POST /linexonewhitelabeler/us-central1/fork_catalog")
     print("  - POST /linexonewhitelabeler/us-central1/start_experiment")
     print("  - GET  /linexonewhitelabeler/us-central1/experiment_status/<id>")
+    print("  - POST /linexonewhitelabeler/us-central1/cancel_experiment/<id>")
+    print("  - POST /linexonewhitelabeler/us-central1/save_experiment/<id>")
+    print("  - DEL  /linexonewhitelabeler/us-central1/delete_experiment/<id>")
+    print("  - DEL  /linexonewhitelabeler/us-central1/delete_catalog/<version>")
     app.run(host="127.0.0.1", port=5050, debug=False)
 

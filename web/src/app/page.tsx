@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, Fragment } from "react";
 import Papa from "papaparse";
-import { Upload, FileText, Search, Activity, Loader2, Users, PanelLeft, Boxes, ChevronDown, ChevronRight } from "lucide-react";
+import { Upload, FileText, Search, Activity, Loader2, Users, PanelLeft, Boxes, ChevronDown, ChevronRight, Square, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const CLOUD_FUNCTION_URL = process.env.NODE_ENV === "development"
@@ -57,6 +57,9 @@ export default function Home() {
   const [experimentId, setExperimentId] = useState<string | null>(null);
   const [experimentState, setExperimentState] = useState<any>(null);
   const [experimentPolling, setExperimentPolling] = useState(false);
+  const [savedExperiments, setSavedExperiments] = useState<any[]>([]);
+  const [selectedSavedExperimentId, setSelectedSavedExperimentId] = useState<string | null>(null);
+  const [showExperimentProgress, setShowExperimentProgress] = useState(false);
 
   // Load test user IDs on mount
   useEffect(() => {
@@ -172,7 +175,13 @@ export default function Home() {
       const res = await fetch(`${CLOUD_FUNCTION_URL}/list_profile_catalogs`);
       if (res.ok) {
         const data = await res.json();
-        setCatalogList(data.catalogs || []);
+        const catalogs = data.catalogs || [];
+        setCatalogList(catalogs);
+        // Default to latest catalog if nothing selected yet
+        if (!selectedCatalogVersion && catalogs.length > 0) {
+          setSelectedCatalogVersion(catalogs[0].version);
+          loadCatalog(catalogs[0].version);
+        }
       }
     } catch { /* silent */ }
   };
@@ -200,10 +209,15 @@ export default function Home() {
     }
   }, [activeView]);
 
-  // Always show the latest catalog when the Catalog tab is selected
+  // Load a catalog when switching to Catalog/Experiment tab:
+  // - If a version is already selected, reload that version (preserves selection across tabs)
+  // - Otherwise, load the latest catalog
   useEffect(() => {
     if (activeView === "generator" && (generatorTab === "catalog" || generatorTab === "experiment")) {
-      loadCatalog();
+      loadCatalog(selectedCatalogVersion || undefined);
+    }
+    if (activeView === "generator" && generatorTab === "experiment" && selectedCatalogVersion) {
+      fetchSavedExperiments(selectedCatalogVersion);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeView, generatorTab]);
@@ -219,8 +233,14 @@ export default function Home() {
           const data = await res.json();
           setExperimentState(data);
 
-          if (data.status === "completed" || data.status === "failed") {
+          if (data.status === "completed" || data.status === "failed" || data.status === "cancelled") {
             setExperimentPolling(false);
+            // Auto-save on completion or cancellation (with partial results)
+            if (data.status === "completed" || data.status === "cancelled") {
+              fetch(`${CLOUD_FUNCTION_URL}/save_experiment/${experimentId}`, { method: "POST" })
+                .then(() => fetchSavedExperiments(selectedCatalogVersion || undefined))
+                .catch(() => {});
+            }
           }
         }
       } catch {
@@ -240,6 +260,7 @@ export default function Home() {
     setGenError("");
     setExperimentState(null);
     setExperimentId(null);
+    setShowExperimentProgress(true);
 
     try {
       const res = await fetch(`${CLOUD_FUNCTION_URL}/start_experiment`, {
@@ -258,6 +279,96 @@ export default function Home() {
       setGenError(err.message || "Failed to start experiment");
     } finally {
       setGenLoading(false);
+    }
+  };
+
+  const stopExperiment = async () => {
+    if (!experimentId) return;
+    try {
+      await fetch(`${CLOUD_FUNCTION_URL}/cancel_experiment/${experimentId}`, { method: "POST" });
+    } catch {
+      // silently fail
+    }
+  };
+
+  const saveExperiment = async () => {
+    if (!experimentId) return;
+    try {
+      const res = await fetch(`${CLOUD_FUNCTION_URL}/save_experiment/${experimentId}`, { method: "POST" });
+      if (res.ok) {
+        setGenError("");
+      }
+    } catch {
+      setGenError("Failed to save experiment");
+    }
+  };
+
+  const deleteExperiment = async () => {
+    if (!experimentId) return;
+    try {
+      await fetch(`${CLOUD_FUNCTION_URL}/delete_experiment/${experimentId}`, { method: "DELETE" });
+      setExperimentState(null);
+      setExperimentId(null);
+      setSelectedSavedExperimentId(null);
+      fetchSavedExperiments(selectedCatalogVersion || undefined);
+    } catch {
+      setGenError("Failed to delete experiment");
+    }
+  };
+
+  const fetchSavedExperiments = async (catalogVersion?: string) => {
+    try {
+      const url = catalogVersion
+        ? `${CLOUD_FUNCTION_URL}/list_experiments?catalog_version=${catalogVersion}`
+        : `${CLOUD_FUNCTION_URL}/list_experiments`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        const exps = data.experiments || [];
+        setSavedExperiments(exps);
+        // Auto-select the latest saved experiment
+        if (exps.length > 0) {
+          loadSavedExperiment(exps[0].experiment_id);
+        } else {
+          setSelectedSavedExperimentId(null);
+          setExperimentState(null);
+          setExperimentId(null);
+        }
+      }
+    } catch { /* silent */ }
+  };
+
+  const loadSavedExperiment = async (expId: string) => {
+    setSelectedSavedExperimentId(expId);
+    // Only clear progress when switching to a different experiment
+    if (expId !== experimentId) {
+      setShowExperimentProgress(false);
+    }
+    try {
+      const res = await fetch(`${CLOUD_FUNCTION_URL}/load_experiment/${expId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setExperimentState(data);
+        setExperimentId(expId);
+      }
+    } catch { /* silent */ }
+  };
+
+  const deleteCatalog = async (version: string) => {
+    if (!confirm(`Delete catalog ${version}? This cannot be undone.`)) return;
+    try {
+      const res = await fetch(`${CLOUD_FUNCTION_URL}/delete_catalog/${version}`, { method: "DELETE" });
+      if (res.ok) {
+        const newList = catalogList.filter((c: any) => c.version !== version);
+        setCatalogList(newList);
+        if (selectedCatalogVersion === version) {
+          const next = newList.length > 0 ? newList[0].version : "";
+          setSelectedCatalogVersion(next);
+          if (next) loadCatalog(next); else setCatalog(null);
+        }
+      }
+    } catch {
+      setGenError("Failed to delete catalog");
     }
   };
 
@@ -480,7 +591,15 @@ export default function Home() {
                 expandedProfile={expandedProfile}
                 setExpandedProfile={setExpandedProfile}
                 startExperiment={startExperiment}
+                stopExperiment={stopExperiment}
+                deleteExperiment={deleteExperiment}
+                deleteCatalog={deleteCatalog}
                 experimentState={experimentState}
+                showExperimentProgress={showExperimentProgress}
+                savedExperiments={savedExperiments}
+                selectedSavedExperimentId={selectedSavedExperimentId}
+                loadSavedExperiment={loadSavedExperiment}
+                fetchSavedExperiments={fetchSavedExperiments}
               />
             ) : null}
           </div>
@@ -498,7 +617,9 @@ function ProfileGeneratorView({
   trainSource, setTrainSource, trainK, setTrainK, trainProfiles,
   catalog, catalogList, selectedCatalogVersion, setSelectedCatalogVersion, loadCatalog,
   expandedProfile, setExpandedProfile,
-  startExperiment, experimentState,
+  startExperiment, stopExperiment, deleteExperiment, deleteCatalog,
+  experimentState, showExperimentProgress,
+  savedExperiments, selectedSavedExperimentId, loadSavedExperiment, fetchSavedExperiments,
 }: any) {
   const [showAllIncentives, setShowAllIncentives] = useState(false);
   const tabs: { key: string; label: string }[] = [
@@ -581,7 +702,7 @@ function ProfileGeneratorView({
                 className="rounded-md bg-black px-6 py-2.5 text-sm font-semibold text-white hover:opacity-80 disabled:opacity-50 flex items-center gap-2"
               >
                 {genLoading && <Loader2 className="h-4 w-4 animate-spin" />}
-                Train Profiles
+                Train
               </button>
             </div>
           )}
@@ -595,17 +716,26 @@ function ProfileGeneratorView({
                   <p className="text-sm text-slate-500">Canonical behavioral profiles learned from data.</p>
                 </div>
                 {catalogList.length > 0 && (
-                  <select
-                    value={selectedCatalogVersion}
-                    onChange={(e) => { setSelectedCatalogVersion(e.target.value); loadCatalog(e.target.value); }}
-                    className="rounded-md border px-3 py-2 text-sm bg-white"
-                  >
-                    {catalogList.map((c: any) => (
-                      <option key={c.version} value={c.version}>
-                        {c.version} ({c.profile_count} profiles)
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={selectedCatalogVersion}
+                      onChange={(e) => { setSelectedCatalogVersion(e.target.value); loadCatalog(e.target.value); }}
+                      className="rounded-md border px-3 py-2 text-sm bg-white"
+                    >
+                      {catalogList.map((c: any) => (
+                        <option key={c.version} value={c.version}>
+                          {c.version} ({c.profile_count} profiles)
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => selectedCatalogVersion && deleteCatalog(selectedCatalogVersion)}
+                      className="rounded-md border border-red-200 p-2 text-red-500 hover:bg-red-50 hover:text-red-600 transition-colors"
+                      title="Delete this catalog"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -770,15 +900,13 @@ function ProfileGeneratorView({
           {/* Experiment Panel */}
           {generatorTab === "experiment" && (
             <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold text-slate-900 mb-1">Portfolio Optimization Experiment</h3>
-                  <p className="text-sm text-slate-500">Run background LLM optimizations to match targeted incentives to profiles.</p>
-                </div>
-                {catalogList.length > 0 && (
+              <h3 className="text-lg font-semibold text-slate-900">Portfolio Optimization Experiment</h3>
+              {catalogList.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-slate-500 shrink-0">Select profile:</label>
                   <select
                     value={selectedCatalogVersion}
-                    onChange={(e) => { setSelectedCatalogVersion(e.target.value); loadCatalog(e.target.value); }}
+                    onChange={(e) => { setSelectedCatalogVersion(e.target.value); loadCatalog(e.target.value); fetchSavedExperiments(e.target.value); }}
                     className="rounded-md border px-3 py-2 text-sm bg-white"
                   >
                     {catalogList.map((c: any) => (
@@ -787,8 +915,15 @@ function ProfileGeneratorView({
                       </option>
                     ))}
                   </select>
-                )}
-              </div>
+                  <button
+                    onClick={() => selectedCatalogVersion && deleteCatalog(selectedCatalogVersion)}
+                    className="rounded-md border border-red-200 p-2 text-red-500 hover:bg-red-50 hover:text-red-600 transition-colors"
+                    title="Delete this catalog"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
 
               {!catalog ? (
                 <div className="text-sm text-slate-500 py-8 text-center">
@@ -797,50 +932,81 @@ function ProfileGeneratorView({
               ) : (
                 <div className="space-y-6 border-t border-slate-200 pt-6">
 
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm text-slate-500">
-                      Evaluates each profile in <span className="font-mono text-xs">{catalog.version}</span> against multiple incentives to maximize Portfolio LTV.
-                    </div>
-                    <button
-                      onClick={startExperiment}
-                      disabled={genLoading || (experimentState && experimentState.status === "running")}
-                      className="rounded-md bg-black px-6 py-2.5 text-sm font-semibold text-white hover:opacity-80 disabled:opacity-50 flex items-center gap-2"
-                    >
-                      {(genLoading || (experimentState && experimentState.status === "running")) && <Loader2 className="h-4 w-4 animate-spin" />}
-                      {experimentState?.status === "running" ? "Optimizing..." : "Run LTV Optimization"}
-                    </button>
+                  <div className="flex items-center">
+                    {experimentState?.status === "running" ? (
+                      <button
+                        onClick={stopExperiment}
+                        className="rounded-md bg-red-600 px-6 py-2.5 text-sm font-semibold text-white hover:opacity-80 flex items-center gap-2"
+                      >
+                        <Square className="h-4 w-4" />
+                        Stop
+                      </button>
+                    ) : (
+                      <button
+                        onClick={startExperiment}
+                        disabled={genLoading}
+                        className="rounded-md bg-black px-6 py-2.5 text-sm font-semibold text-white hover:opacity-80 disabled:opacity-50 flex items-center gap-2"
+                      >
+                        {genLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                        Optimize
+                      </button>
+                    )}
                   </div>
+
+                  {savedExperiments.length > 1 && (
+                    <div className="flex items-center gap-3">
+                      <label className="text-xs font-medium text-slate-500 uppercase tracking-wider shrink-0">Saved Runs</label>
+                      <select
+                        value={selectedSavedExperimentId || ""}
+                        onChange={(e) => {
+                          if (e.target.value) loadSavedExperiment(e.target.value);
+                        }}
+                        className="rounded-md border px-3 py-1.5 text-sm bg-white flex-1"
+                      >
+                        {savedExperiments.map((exp: any) => (
+                          <option key={exp.experiment_id} value={exp.experiment_id}>
+                            {new Date(exp.completed_at || exp.started_at).toLocaleString()} — {exp.status} ({exp.result_count} profiles)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   {experimentState && (
                     <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm space-y-6">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-3">
-                          <h4 className="font-semibold text-slate-900">Optimization Progress</h4>
-                          <span className={cn(
-                            "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider",
-                            experimentState.status === "running" ? "bg-blue-100 text-blue-700" :
-                              experimentState.status === "completed" ? "bg-green-100 text-green-700" :
-                                "bg-red-100 text-red-700"
-                          )}>
-                            {experimentState.status}
-                          </span>
-                        </div>
-                        <div className="text-sm font-mono text-slate-500">{experimentState.progress}%</div>
-                      </div>
+                      {showExperimentProgress && (
+                        <>
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-3">
+                              <h4 className="font-semibold text-slate-900">Optimization Progress</h4>
+                              <span className={cn(
+                                "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider",
+                                experimentState.status === "running" ? "bg-blue-100 text-blue-700" :
+                                  experimentState.status === "completed" ? "bg-green-100 text-green-700" :
+                                    experimentState.status === "cancelled" ? "bg-amber-100 text-amber-700" :
+                                      "bg-red-100 text-red-700"
+                              )}>
+                                {experimentState.status}
+                              </span>
+                            </div>
+                            <div className="text-sm font-mono text-slate-500">{experimentState.progress}%</div>
+                          </div>
 
-                      <div className="w-full bg-slate-100 rounded-full h-2 mb-4 overflow-hidden">
-                        <div
-                          className={cn("h-full rounded-full transition-all duration-500", experimentState.status === 'failed' ? 'bg-red-500' : 'bg-blue-600')}
-                          style={{ width: `${experimentState.progress}%` }}
-                        />
-                      </div>
+                          <div className="w-full bg-slate-100 rounded-full h-2 mb-4 overflow-hidden">
+                            <div
+                              className={cn("h-full rounded-full transition-all duration-500", experimentState.status === 'failed' ? 'bg-red-500' : experimentState.status === 'cancelled' ? 'bg-amber-500' : 'bg-blue-600')}
+                              style={{ width: `${experimentState.progress}%` }}
+                            />
+                          </div>
 
-                      <div className="text-sm text-slate-600 mb-6">
-                        {experimentState.current_step}
-                      </div>
+                          <div className="text-sm text-slate-600 mb-6">
+                            {experimentState.current_step}
+                          </div>
+                        </>
+                      )}
 
                       {experimentState.status === "failed" && (
-                        <div className="rounded-md bg-red-50 p-4 text-red-700 text-sm mt-4">
+                        <div className="rounded-md bg-red-50 p-4 text-red-700 text-sm">
                           Error: {experimentState.error}
                         </div>
                       )}
@@ -849,7 +1015,18 @@ function ProfileGeneratorView({
                         <div className="mt-8 space-y-6">
                           {/* Results table — most important, shown first */}
                           <div>
-                            <h4 className="font-semibold text-slate-900 mb-4">Optimal Incentive Programs</h4>
+                            <div className="flex items-center justify-between mb-4">
+                              <h4 className="font-semibold text-slate-900">Optimal Incentive Programs</h4>
+                              {(experimentState.status === "completed" || experimentState.status === "cancelled") && (
+                                <button
+                                  onClick={deleteExperiment}
+                                  className="rounded-md border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 flex items-center gap-1.5"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                  Delete
+                                </button>
+                              )}
+                            </div>
                             <div className="overflow-x-auto">
                               <table className="w-full text-sm">
                                 <thead>
@@ -859,8 +1036,8 @@ function ProfileGeneratorView({
                                     <th className="py-2 pr-4 font-medium text-right">Orig LTV</th>
                                     <th className="py-2 pr-4 font-medium text-right">Gross LTV</th>
                                     <th className="py-2 pr-4 font-medium text-right">Cost</th>
-                                    <th className="py-2 pr-4 font-medium text-right">Net LTV</th>
-                                    <th className="py-2 pr-4 font-medium text-right">Net Lift</th>
+                                    <th className="py-2 pr-4 font-medium text-right">Lift</th>
+                                    <th className="py-2 pr-4 font-bold text-right">Final LTV</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -882,14 +1059,14 @@ function ProfileGeneratorView({
                                       <td className="py-3 pr-4 text-right font-mono text-slate-700">
                                         {`$${Math.round(r.new_gross_portfolio_ltv).toLocaleString('en-US')}`}
                                       </td>
-                                      <td className="py-3 pr-4 text-right font-mono text-red-600">
+                                      <td className="py-3 pr-4 text-right font-mono text-slate-700">
                                         {`-$${Math.round(r.portfolio_cost).toLocaleString('en-US')}`}
                                       </td>
-                                      <td className="py-3 pr-4 text-right font-mono text-green-600 font-semibold">
-                                        {`$${Math.round(r.new_net_portfolio_ltv).toLocaleString('en-US')}`}
-                                      </td>
-                                      <td className="py-3 pr-4 text-right font-mono text-blue-600 font-semibold">
+                                      <td className="py-3 pr-4 text-right font-mono text-slate-700">
                                         {`+$${Math.round(r.lift).toLocaleString('en-US')}`}
+                                      </td>
+                                      <td className="py-3 pr-4 text-right font-mono text-slate-900 font-bold">
+                                        {`$${Math.round(r.new_net_portfolio_ltv).toLocaleString('en-US')}`}
                                       </td>
                                     </tr>
                                   ))}
@@ -909,22 +1086,22 @@ function ProfileGeneratorView({
                                         return `$${Math.round(totalGross).toLocaleString('en-US')}`;
                                       })()}
                                     </td>
-                                    <td className="py-4 pr-4 text-right font-mono text-red-600 border-t border-slate-200">
+                                    <td className="py-4 pr-4 text-right font-mono text-slate-700 border-t border-slate-200">
                                       {(() => {
                                         const totalCost = experimentState.results.reduce((sum: number, r: any) => sum + (r.portfolio_cost || 0), 0);
                                         return `-$${Math.round(totalCost).toLocaleString('en-US')}`;
                                       })()}
                                     </td>
-                                    <td className="py-4 pr-4 text-right font-mono text-green-600 font-bold border-t border-slate-200">
-                                      {(() => {
-                                        const totalNet = experimentState.results.reduce((sum: number, r: any) => sum + (r.new_net_portfolio_ltv || 0), 0);
-                                        return `$${Math.round(totalNet).toLocaleString('en-US')}`;
-                                      })()}
-                                    </td>
-                                    <td className="py-4 pr-4 text-right font-mono text-blue-600 font-bold border-t border-slate-200">
+                                    <td className="py-4 pr-4 text-right font-mono text-slate-700 font-bold border-t border-slate-200">
                                       {(() => {
                                         const totalLift = experimentState.results.reduce((sum: number, r: any) => sum + (r.lift || 0), 0);
                                         return `+$${Math.round(totalLift).toLocaleString('en-US')}`;
+                                      })()}
+                                    </td>
+                                    <td className="py-4 pr-4 text-right font-mono text-slate-900 font-bold border-t border-slate-200">
+                                      {(() => {
+                                        const totalNet = experimentState.results.reduce((sum: number, r: any) => sum + (r.new_net_portfolio_ltv || 0), 0);
+                                        return `$${Math.round(totalNet).toLocaleString('en-US')}`;
                                       })()}
                                     </td>
                                   </tr>

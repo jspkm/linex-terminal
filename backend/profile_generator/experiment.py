@@ -160,7 +160,7 @@ class ExperimentResult(BaseModel):
 class ExperimentState(BaseModel):
     experiment_id: str
     catalog_version: str
-    status: str  # "running", "completed", "failed"
+    status: str  # "running", "completed", "failed", "cancelled"
     progress: int  # 0 to 100
     current_step: str
     iterations_per_profile: int
@@ -169,6 +169,7 @@ class ExperimentState(BaseModel):
     error: Optional[str] = None
     started_at: datetime
     completed_at: Optional[datetime] = None
+    cancelled: bool = False
 
 def _strip_fences(raw: str) -> str:
     if not raw.startswith("```"):
@@ -343,11 +344,22 @@ def _run_experiment_thread(experiment_id: str, catalog_version: str,
         profiles_done = 0
 
         for profile in catalog.profiles:
+            if state.cancelled:
+                state.status = "cancelled"
+                state.current_step = "Experiment cancelled by user."
+                state.completed_at = datetime.utcnow()
+                return
+
             best_eval = None
             no_improve_count = 0
             iteration = 0
 
             while no_improve_count < patience and iteration < max_iterations:
+                if state.cancelled:
+                    state.status = "cancelled"
+                    state.current_step = "Experiment cancelled by user."
+                    state.completed_at = datetime.utcnow()
+                    return
                 iteration += 1
                 state.current_step = (
                     f"Evaluating {profile.profile_id} "
@@ -374,10 +386,11 @@ def _run_experiment_thread(experiment_id: str, catalog_version: str,
             if best_eval:
                 final = _enforce_baseline(best_eval, profile.ltv)
 
-                original_portfolio_ltv = profile.portfolio_ltv
-                new_gross_portfolio_ltv = final.gross_ltv * profile.population_count
-                portfolio_cost = final.estimated_cost * profile.population_count
-                new_net_portfolio_ltv = final.net_ltv * profile.population_count
+                pop = profile.population_count or 1
+                original_portfolio_ltv = profile.portfolio_ltv or (profile.ltv * pop)
+                new_gross_portfolio_ltv = final.gross_ltv * pop
+                portfolio_cost = final.estimated_cost * pop
+                new_net_portfolio_ltv = final.net_ltv * pop
 
                 result = ExperimentResult(
                     profile_id=profile.profile_id,
@@ -432,3 +445,77 @@ def start_experiment(catalog_version: str, *,
 
 def get_experiment_status(experiment_id: str) -> Optional[ExperimentState]:
     return _experiments.get(experiment_id)
+
+def cancel_experiment(experiment_id: str) -> bool:
+    """Request cancellation of a running experiment."""
+    state = _experiments.get(experiment_id)
+    if not state or state.status != "running":
+        return False
+    state.cancelled = True
+    return True
+
+# ---- Experiment persistence ----
+
+from pathlib import Path as _Path
+from config import EXPERIMENT_DIR
+
+def _ensure_experiment_dir() -> _Path:
+    EXPERIMENT_DIR.mkdir(parents=True, exist_ok=True)
+    return EXPERIMENT_DIR
+
+def save_experiment(experiment_id: str) -> str | None:
+    """Persist a completed experiment to disk. Returns file path or None."""
+    state = _experiments.get(experiment_id)
+    if not state or state.status not in ("completed", "cancelled"):
+        return None
+    exp_dir = _ensure_experiment_dir()
+    path = exp_dir / f"{experiment_id}.json"
+    path.write_text(state.model_dump_json(indent=2), encoding="utf-8")
+    return str(path)
+
+def delete_experiment(experiment_id: str) -> bool:
+    """Remove experiment from memory and disk."""
+    removed = _experiments.pop(experiment_id, None)
+    path = EXPERIMENT_DIR / f"{experiment_id}.json"
+    disk_removed = False
+    if path.exists():
+        path.unlink()
+        disk_removed = True
+    return removed is not None or disk_removed
+
+
+def list_experiments(catalog_version: str | None = None) -> list[dict]:
+    """List saved experiments on disk, optionally filtered by catalog_version.
+
+    Returns list of {experiment_id, catalog_version, status, started_at, completed_at, result_count}.
+    """
+    exp_dir = _ensure_experiment_dir()
+    results = []
+    for f in exp_dir.glob("*.json"):
+        try:
+            import json as _json
+            data = _json.loads(f.read_text(encoding="utf-8"))
+            if catalog_version and data.get("catalog_version") != catalog_version:
+                continue
+            results.append({
+                "experiment_id": data.get("experiment_id", f.stem),
+                "catalog_version": data.get("catalog_version", ""),
+                "status": data.get("status", ""),
+                "started_at": data.get("started_at", ""),
+                "completed_at": data.get("completed_at", ""),
+                "result_count": len(data.get("results", [])),
+            })
+        except Exception:
+            continue
+    results.sort(key=lambda e: e.get("completed_at") or e.get("started_at") or "", reverse=True)
+    return results
+
+
+def load_experiment(experiment_id: str) -> ExperimentState | None:
+    """Load a saved experiment from disk."""
+    path = EXPERIMENT_DIR / f"{experiment_id}.json"
+    if not path.exists():
+        return None
+    import json as _json
+    data = _json.loads(path.read_text(encoding="utf-8"))
+    return ExperimentState.model_validate(data)
