@@ -32,5 +32,6 @@ MAX_REASONABLE_QUANTITY = 5000
 
 # Profile Generator
 PROFILE_CATALOG_DIR = DATA_DIR / "profile_catalogs"
+EXPERIMENT_DIR = DATA_DIR / "experiments"
 DEFAULT_K = 10
 DEFAULT_TIME_WINDOW = "Q"  # quarterly

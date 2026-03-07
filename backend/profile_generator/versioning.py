@@ -45,7 +45,7 @@ def list_catalogs() -> list[dict]:
     """
     catalog_dir = _ensure_dir()
     results = []
-    for f in sorted(catalog_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+    for f in catalog_dir.glob("*.json"):
         try:
             data = json.loads(f.read_text(encoding="utf-8"))
             results.append({
@@ -57,17 +57,38 @@ def list_catalogs() -> list[dict]:
             })
         except (json.JSONDecodeError, KeyError):
             continue
+    # Sort by created_at descending (newest first), fall back to version string
+    results.sort(key=lambda c: c["created_at"] or "", reverse=True)
     return results
 
 
 def get_latest_catalog() -> ProfileCatalog | None:
     """Load the most recently saved catalog."""
     catalog_dir = _ensure_dir()
-    files = sorted(catalog_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    files = list(catalog_dir.glob("*.json"))
     if not files:
         return None
-    data = json.loads(files[0].read_text(encoding="utf-8"))
-    return ProfileCatalog.model_validate(data)
+    # Sort by created_at from JSON content (newest first)
+    catalogs = []
+    for f in files:
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+            catalogs.append((data.get("created_at", ""), data))
+        except (json.JSONDecodeError, KeyError):
+            continue
+    if not catalogs:
+        return None
+    catalogs.sort(key=lambda c: c[0] or "", reverse=True)
+    return ProfileCatalog.model_validate(catalogs[0][1])
+
+
+def delete_catalog(version: str) -> bool:
+    """Delete a catalog by version. Returns True if deleted, False if not found."""
+    path = PROFILE_CATALOG_DIR / f"{version}.json"
+    if not path.exists():
+        return False
+    path.unlink()
+    return True
 
 
 def fork_catalog(
