@@ -32,6 +32,7 @@ def _get_gemini():
 
 # Global in-memory state for experiments
 _experiments: Dict[str, "ExperimentState"] = {}
+_deleted_experiment_ids: set[str] = set()
 
 
 class ProfileIncentiveEvaluation(BaseModel):
@@ -226,6 +227,8 @@ def _enforce_baseline(
 
 def _persist_state(state: "ExperimentState"):
     """Save experiment state to Firestore (best-effort, swallow errors)."""
+    if state.experiment_id in _deleted_experiment_ids:
+        return
     try:
         fs_save_experiment(state)
     except Exception:
@@ -264,7 +267,7 @@ def _run_experiment_thread(experiment_id: str, catalog_version: str,
         for profile in catalog.profiles:
             if state.cancelled:
                 state.status = "cancelled"
-                state.current_step = "Experiment cancelled by user."
+                state.current_step = "Optimization cancelled by user."
                 state.completed_at = datetime.utcnow()
                 _persist_state(state)
                 return
@@ -276,7 +279,7 @@ def _run_experiment_thread(experiment_id: str, catalog_version: str,
             while no_improve_count < patience and iteration < max_iterations:
                 if state.cancelled:
                     state.status = "cancelled"
-                    state.current_step = "Experiment cancelled by user."
+                    state.current_step = "Optimization cancelled by user."
                     state.completed_at = datetime.utcnow()
                     _persist_state(state)
                     return
@@ -330,14 +333,14 @@ def _run_experiment_thread(experiment_id: str, catalog_version: str,
 
         state.status = "completed"
         state.progress = 100
-        state.current_step = "Experiment completed."
+        state.current_step = "Optimization completed."
         state.completed_at = datetime.utcnow()
         _persist_state(state)
 
     except Exception as e:
         state.status = "failed"
         state.error = str(e)
-        state.current_step = "Experiment failed."
+        state.current_step = "Optimization failed."
         state.completed_at = datetime.utcnow()
         _persist_state(state)
 
@@ -356,6 +359,7 @@ def start_experiment(catalog_version: str, *,
     incentives_snapshot = [inc.model_dump() for inc in inc_set.incentives]
 
     experiment_id = str(uuid.uuid4())
+    _deleted_experiment_ids.discard(experiment_id)
     state = ExperimentState(
         experiment_id=experiment_id,
         catalog_version=catalog_version,
@@ -408,6 +412,7 @@ def save_experiment(experiment_id: str) -> str | None:
 
 def delete_experiment(experiment_id: str) -> bool:
     """Remove experiment from memory and Firestore."""
+    _deleted_experiment_ids.add(experiment_id)
     removed = _experiments.pop(experiment_id, None)
     fs_removed = fs_delete_experiment(experiment_id)
     return removed is not None or fs_removed

@@ -55,12 +55,16 @@
                 "function": "ask_test_user"
             },
             {
-                "source": "/api/train_profiles",
-                "function": "train_profiles"
+                "source": "/api/learn_profiles",
+                "function": "learn_profiles"
             },
             {
                 "source": "/api/list_profile_catalogs",
                 "function": "list_profile_catalogs"
+            },
+            {
+                "source": "/api/list_uploaded_training_datasets",
+                "function": "list_uploaded_training_datasets"
             },
             {
                 "source": "/api/profile_catalog",
@@ -79,32 +83,36 @@
                 "function": "delete_catalog_fn"
             },
             {
-                "source": "/api/start_experiment",
-                "function": "start_experiment_fn"
+                "source": "/api/delete_portfolio_dataset/**",
+                "function": "delete_portfolio_dataset_fn"
             },
             {
-                "source": "/api/experiment_status/**",
-                "function": "experiment_status"
+                "source": "/api/start_optimize",
+                "function": "start_optimize_fn"
             },
             {
-                "source": "/api/list_experiments",
-                "function": "list_experiments_fn"
+                "source": "/api/optimize_status/**",
+                "function": "optimize_status"
             },
             {
-                "source": "/api/load_experiment/**",
-                "function": "load_experiment_fn"
+                "source": "/api/list_optimizations",
+                "function": "list_optimizations_fn"
             },
             {
-                "source": "/api/cancel_experiment/**",
-                "function": "cancel_experiment_fn"
+                "source": "/api/load_optimize/**",
+                "function": "load_optimize_fn"
             },
             {
-                "source": "/api/save_experiment/**",
-                "function": "save_experiment_fn"
+                "source": "/api/cancel_optimize/**",
+                "function": "cancel_optimize_fn"
             },
             {
-                "source": "/api/delete_experiment/**",
-                "function": "delete_experiment_fn"
+                "source": "/api/save_optimize/**",
+                "function": "save_optimize_fn"
+            },
+            {
+                "source": "/api/delete_optimize/**",
+                "function": "delete_optimize_fn"
             },
             {
                 "source": "/api/list_incentive_sets",

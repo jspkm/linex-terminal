@@ -9,21 +9,26 @@ import os
 import random
 
 from firebase_functions import https_fn, options
-from firebase_admin import initialize_app, credentials
+from firebase_admin import initialize_app, credentials, get_app
 import firebase_admin
 
 from config import CARDS_PATH, FIREBASE_CREDENTIALS_PATH, GEMINI_API_KEY, MODEL, TEST_USERS_DIR
 
 # Initialize Firebase Admin SDK (lightweight — no Firestore queries)
 try:
-    if not firebase_admin._apps:
+    get_app()
+except ValueError:
+    try:
         if FIREBASE_CREDENTIALS_PATH and os.path.exists(FIREBASE_CREDENTIALS_PATH):
             cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
             initialize_app(cred)
         else:
             initialize_app()  # Uses Application Default Credentials (Cloud Run)
-except Exception as e:
-    print(f"Firebase initialization warning: {e}")
+    except ValueError:
+        # Another concurrent init won the race; existing default app is fine.
+        pass
+    except Exception as e:
+        print(f"Firebase initialization warning: {e}")
 
 
 # --------------- Lazy accessors (avoid cold-start Firestore/Gemini work) ---------------
@@ -272,6 +277,19 @@ def list_profile_catalogs(req: https_fn.Request) -> https_fn.Response:
 
 
 @https_fn.on_request(cors=_CORS_ALL)
+def list_uploaded_training_datasets(req: https_fn.Request) -> https_fn.Response:
+    """List uploaded training datasets from Firestore."""
+    if req.method == "OPTIONS":
+        return https_fn.Response(status=204)
+    try:
+        from profile_generator.firestore_client import fs_list_uploaded_training_datasets
+        datasets = fs_list_uploaded_training_datasets()
+        return _json_response({"datasets": datasets})
+    except Exception as e:
+        return _json_response({"error": str(e)}, 500)
+
+
+@https_fn.on_request(cors=_CORS_ALL)
 def profile_catalog(req: https_fn.Request) -> https_fn.Response:
     """Get a profile catalog by version, or the latest if no version given."""
     if req.method == "OPTIONS":
@@ -328,8 +346,26 @@ def delete_catalog_fn(req: https_fn.Request) -> https_fn.Response:
         return _json_response({"error": str(e)}, 500)
 
 
+@https_fn.on_request(cors=_CORS_ALL)
+def delete_portfolio_dataset_fn(req: https_fn.Request) -> https_fn.Response:
+    """Delete a portfolio dataset and all associated catalogs/optimizations."""
+    if req.method == "OPTIONS":
+        return https_fn.Response(status=204)
+    try:
+        from profile_generator.firestore_client import fs_delete_portfolio_dataset_cascade
+        dataset_id = _extract_path_param(req, "delete_portfolio_dataset")
+        if not dataset_id:
+            return _json_response({"error": "Missing dataset_id"}, 400)
+        result = fs_delete_portfolio_dataset_cascade(dataset_id)
+        if not result:
+            return _json_response({"error": "Portfolio dataset not found"}, 404)
+        return _json_response(result)
+    except Exception as e:
+        return _json_response({"error": str(e)}, 500)
+
+
 @https_fn.on_request(cors=_CORS_ALL, timeout_sec=300)
-def train_profiles(req: https_fn.Request) -> https_fn.Response:
+def learn_profiles(req: https_fn.Request) -> https_fn.Response:
     """Train profile clusters from test users (Firestore or disk) or retail data."""
     if req.method == "OPTIONS":
         return https_fn.Response(status=204)
@@ -337,19 +373,69 @@ def train_profiles(req: https_fn.Request) -> https_fn.Response:
         from profile_generator.feature_derivation import derive_batch_features
         from profile_generator.trainer import train_profiles as _train_profiles
         from profile_generator.versioning import save_catalog
-        from analysis.preprocessor import parse_csv_transactions
+        from profile_generator.firestore_client import fs_save_uploaded_training_dataset, fs_load_uploaded_training_dataset
+        from analysis.preprocessor import parse_csv_transactions, parse_training_records
         from config import DEFAULT_K
         from datetime import datetime
         import csv
         import io
 
         data = req.get_json(silent=True) or {}
-        source = data.get("source", "test-users")
+        source = str(data.get("source", "test-users") or "test-users")
         k = data.get("k", DEFAULT_K)
         limit = data.get("limit", 0)
+        upload_name = str(data.get("upload_name", "")).strip()
+        upload_csv_text = str(data.get("csv_text", "") or "")
+        upload_transactions = data.get("transactions", [])
+        upload_dataset_id = ""
 
         users = {}
-        if source == "retail":
+        if source == "uploaded":
+            raw_rows: list[dict] = []
+            if upload_csv_text.strip():
+                reader = csv.DictReader(io.StringIO(upload_csv_text))
+                raw_rows = [row for row in reader]
+            elif isinstance(upload_transactions, list):
+                raw_rows = upload_transactions
+
+            if not raw_rows:
+                return _json_response({"error": "No uploaded transactions provided"}, 400)
+
+            users = parse_training_records(raw_rows, default_customer_id=upload_name)
+            if not users:
+                return _json_response({"error": "No valid user transactions found in uploaded data"}, 400)
+            parsed_txn_count = sum(len(u.transactions) for u in users.values())
+            upload_dataset_id = fs_save_uploaded_training_dataset(
+                upload_name=upload_name,
+                transactions=raw_rows if not upload_csv_text.strip() else None,
+                csv_text=upload_csv_text,
+                parsed_user_count=len(users),
+                parsed_transaction_count=parsed_txn_count,
+            )
+            source = f"upload:{upload_name}" if upload_name else f"upload:{upload_dataset_id}"
+        elif source.startswith("uploaded-dataset:"):
+            selected_dataset_id = source.split(":", 1)[1].strip()
+            if not selected_dataset_id:
+                return _json_response({"error": "Missing uploaded dataset id"}, 400)
+            dataset = fs_load_uploaded_training_dataset(selected_dataset_id)
+            if not dataset:
+                return _json_response({"error": "Uploaded dataset not found"}, 404)
+            raw_rows: list[dict] = []
+            dataset_csv_text = str(dataset.get("csv_text", "") or "")
+            if dataset_csv_text:
+                reader = csv.DictReader(io.StringIO(dataset_csv_text))
+                raw_rows = [row for row in reader]
+            elif isinstance(dataset.get("rows"), list):
+                raw_rows = dataset.get("rows") or []
+            if not raw_rows:
+                return _json_response({"error": "Selected uploaded dataset has no rows"}, 400)
+            users = parse_training_records(raw_rows, default_customer_id="")
+            if not users:
+                return _json_response({"error": "No valid user transactions found in selected uploaded dataset"}, 400)
+            upload_dataset_id = selected_dataset_id
+            upload_name = str(dataset.get("upload_name", "")).strip()
+            source = f"upload:{upload_name}" if upload_name else f"upload:{upload_dataset_id}"
+        elif source == "retail":
             from config import DATA_DIR
             retail_path = DATA_DIR / "retail.csv"
             if not retail_path.exists():
@@ -409,18 +495,21 @@ def train_profiles(req: https_fn.Request) -> https_fn.Response:
                     global_max = t.date
 
         cat = _train_profiles(feature_df, k=k, source=source, dataset_max_date=global_max)
+        if upload_dataset_id:
+            cat.upload_dataset_id = upload_dataset_id
+            cat.upload_dataset_name = upload_name
         save_catalog(cat)
         return _json_response(cat.model_dump(mode="json"))
     except Exception as e:
         return _json_response({"error": str(e)}, 500)
 
 
-# ==================== Experiment endpoints ====================
+# ==================== Optimize endpoints ====================
 
 
 @https_fn.on_request(cors=_CORS_ALL, timeout_sec=540)
-def start_experiment_fn(req: https_fn.Request) -> https_fn.Response:
-    """Start an LTV optimization experiment."""
+def start_optimize_fn(req: https_fn.Request) -> https_fn.Response:
+    """Start an LTV optimization run."""
     if req.method == "OPTIONS":
         return https_fn.Response(status=204)
     try:
@@ -444,26 +533,26 @@ def start_experiment_fn(req: https_fn.Request) -> https_fn.Response:
 
 
 @https_fn.on_request(cors=_CORS_ALL)
-def experiment_status(req: https_fn.Request) -> https_fn.Response:
-    """Get experiment status by ID (checks memory then Firestore)."""
+def optimize_status(req: https_fn.Request) -> https_fn.Response:
+    """Get optimization status by ID (checks memory then Firestore)."""
     if req.method == "OPTIONS":
         return https_fn.Response(status=204)
     try:
         from profile_generator.experiment import get_experiment_status as _get_experiment_status
-        experiment_id = _extract_path_param(req, "experiment_status")
+        experiment_id = _extract_path_param(req, "optimize_status")
         if not experiment_id:
             return _json_response({"error": "Missing experiment_id"}, 400)
         state = _get_experiment_status(experiment_id)
         if not state:
-            return _json_response({"error": "Experiment not found"}, 404)
+            return _json_response({"error": "Optimization not found"}, 404)
         return _json_response(state.model_dump(mode="json"))
     except Exception as e:
         return _json_response({"error": str(e)}, 500)
 
 
 @https_fn.on_request(cors=_CORS_ALL)
-def list_experiments_fn(req: https_fn.Request) -> https_fn.Response:
-    """List saved experiments from Firestore."""
+def list_optimizations_fn(req: https_fn.Request) -> https_fn.Response:
+    """List saved optimization runs from Firestore."""
     if req.method == "OPTIONS":
         return https_fn.Response(status=204)
     try:
@@ -476,72 +565,72 @@ def list_experiments_fn(req: https_fn.Request) -> https_fn.Response:
 
 
 @https_fn.on_request(cors=_CORS_ALL)
-def load_experiment_fn(req: https_fn.Request) -> https_fn.Response:
-    """Load a saved experiment from Firestore."""
+def load_optimize_fn(req: https_fn.Request) -> https_fn.Response:
+    """Load a saved optimization run from Firestore."""
     if req.method == "OPTIONS":
         return https_fn.Response(status=204)
     try:
         from profile_generator.experiment import load_experiment as _load_experiment
-        experiment_id = _extract_path_param(req, "load_experiment")
+        experiment_id = _extract_path_param(req, "load_optimize")
         if not experiment_id:
             return _json_response({"error": "Missing experiment_id"}, 400)
         state = _load_experiment(experiment_id)
         if not state:
-            return _json_response({"error": "Experiment not found"}, 404)
+            return _json_response({"error": "Optimization not found"}, 404)
         return _json_response(state.model_dump(mode="json"))
     except Exception as e:
         return _json_response({"error": str(e)}, 500)
 
 
 @https_fn.on_request(cors=_CORS_ALL)
-def cancel_experiment_fn(req: https_fn.Request) -> https_fn.Response:
-    """Cancel a running experiment."""
+def cancel_optimize_fn(req: https_fn.Request) -> https_fn.Response:
+    """Cancel a running optimization."""
     if req.method == "OPTIONS":
         return https_fn.Response(status=204)
     try:
         from profile_generator.experiment import cancel_experiment as _cancel_experiment
-        experiment_id = _extract_path_param(req, "cancel_experiment")
+        experiment_id = _extract_path_param(req, "cancel_optimize")
         if not experiment_id:
             return _json_response({"error": "Missing experiment_id"}, 400)
         ok = _cancel_experiment(experiment_id)
         if not ok:
-            return _json_response({"error": "Experiment not found or not running"}, 404)
+            return _json_response({"error": "Optimization not found or not running"}, 404)
         return _json_response({"cancelled": True})
     except Exception as e:
         return _json_response({"error": str(e)}, 500)
 
 
 @https_fn.on_request(cors=_CORS_ALL)
-def save_experiment_fn(req: https_fn.Request) -> https_fn.Response:
-    """Persist a completed experiment to Firestore."""
+def save_optimize_fn(req: https_fn.Request) -> https_fn.Response:
+    """Persist a completed optimization to Firestore."""
     if req.method == "OPTIONS":
         return https_fn.Response(status=204)
     try:
         from profile_generator.experiment import save_experiment as _save_experiment
-        experiment_id = _extract_path_param(req, "save_experiment")
+        experiment_id = _extract_path_param(req, "save_optimize")
         if not experiment_id:
             return _json_response({"error": "Missing experiment_id"}, 400)
         path = _save_experiment(experiment_id)
         if not path:
-            return _json_response({"error": "Experiment not found or not saveable"}, 404)
+            return _json_response({"error": "Optimization not found or not saveable"}, 404)
         return _json_response({"saved": True, "path": path})
     except Exception as e:
         return _json_response({"error": str(e)}, 500)
 
 
 @https_fn.on_request(cors=_CORS_ALL)
-def delete_experiment_fn(req: https_fn.Request) -> https_fn.Response:
-    """Delete an experiment from memory and Firestore."""
+def delete_optimize_fn(req: https_fn.Request) -> https_fn.Response:
+    """Delete an optimization run from memory and Firestore."""
     if req.method == "OPTIONS":
         return https_fn.Response(status=204)
     try:
         from profile_generator.experiment import delete_experiment as _delete_experiment
-        experiment_id = _extract_path_param(req, "delete_experiment")
+        experiment_id = _extract_path_param(req, "delete_optimize")
         if not experiment_id:
             return _json_response({"error": "Missing experiment_id"}, 400)
         ok = _delete_experiment(experiment_id)
         if not ok:
-            return _json_response({"error": "Experiment not found"}, 404)
+            return _json_response({"error": "Optimization not found"}, 404)
         return _json_response({"deleted": True})
     except Exception as e:
         return _json_response({"error": str(e)}, 500)

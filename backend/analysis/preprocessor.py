@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 from datetime import datetime
 
 from config import EXCLUDED_STOCK_CODES, MAX_REASONABLE_QUANTITY
@@ -125,6 +126,132 @@ def parse_json_transactions(
         ))
 
     return UserTransactions(customer_id=customer_id, transactions=transactions)
+
+
+def _parse_datetime(value: object) -> datetime | None:
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+
+    iso_raw = raw.replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(iso_raw)
+    except (ValueError, TypeError):
+        pass
+
+    fmts = [
+        "%Y-%m-%d",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%m/%d/%Y",
+        "%m/%d/%Y %H:%M:%S",
+        "%m/%d/%Y %H:%M",
+        "%m/%d/%y",
+        "%d/%m/%Y",
+        "%d/%m/%Y %H:%M:%S",
+        "%d/%m/%Y %H:%M",
+        "%Y/%m/%d",
+        "%Y/%m/%d %H:%M:%S",
+    ]
+    for fmt in fmts:
+        try:
+            return datetime.strptime(raw, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _normalize_key(key: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(key).strip().lower())
+
+
+def _clean_numeric(value: object) -> object:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return value
+    txt = str(value).strip()
+    if not txt:
+        return None
+    txt = txt.replace(",", "").replace("$", "")
+    if txt.startswith("(") and txt.endswith(")"):
+        txt = f"-{txt[1:-1]}"
+    return txt
+
+
+def parse_training_records(records: list[dict], default_customer_id: str = "") -> dict[str, UserTransactions]:
+    """Parse uploaded training rows with flexible column naming into users map."""
+    if not records:
+        return {}
+
+    field_aliases: dict[str, list[str]] = {
+        "customer_id": ["customer_id", "customer id", "user_id", "user id", "userid", "client_id", "account_id", "member_id", "id"],
+        "date": ["date", "transaction_date", "transaction date", "invoice_date", "invoice date", "posted_date", "posted date", "timestamp", "datetime"],
+        "description": ["description", "memo", "narrative", "item", "item_name", "product", "product_name"],
+        "amount": ["amount", "transaction_amount", "transaction amount", "total", "value", "line_total"],
+        "quantity": ["quantity", "qty", "units", "count"],
+        "unit_price": ["unit_price", "unit price", "price", "item_price"],
+        "country": ["country", "country_code", "region"],
+        "currency": ["currency", "currency_code", "ccy"],
+        "invoice": ["invoice", "invoice_id", "invoice number", "order_id", "order number", "transaction_id", "reference"],
+        "stock_code": ["stock_code", "stock code", "sku", "product_code", "item_code"],
+        "merchant": ["merchant", "merchant_name", "vendor", "store"],
+        "category": ["category", "category_name", "segment"],
+    }
+
+    alias_lookup: dict[str, str] = {}
+    for canonical, aliases in field_aliases.items():
+        for alias in aliases:
+            alias_lookup[_normalize_key(alias)] = canonical
+
+    grouped: dict[str, list[dict]] = {}
+    for row in records:
+        if not isinstance(row, dict):
+            continue
+        normalized_row: dict[str, object] = {}
+        for raw_key, raw_value in row.items():
+            canonical = alias_lookup.get(_normalize_key(raw_key))
+            if canonical:
+                normalized_row[canonical] = raw_value
+
+        dt = _parse_datetime(normalized_row.get("date"))
+        if not dt:
+            continue
+        normalized_row["date"] = dt.isoformat()
+        normalized_row["amount"] = _clean_numeric(normalized_row.get("amount"))
+        normalized_row["quantity"] = _clean_numeric(normalized_row.get("quantity"))
+        normalized_row["unit_price"] = _clean_numeric(normalized_row.get("unit_price"))
+
+        customer_id = str(normalized_row.get("customer_id") or "").strip()
+        if not customer_id:
+            customer_id = str(default_customer_id).strip()
+        if not customer_id:
+            customer_id = str(normalized_row.get("invoice") or "").strip()
+        if not customer_id:
+            continue
+
+        grouped.setdefault(customer_id, []).append({
+            "date": normalized_row.get("date"),
+            "description": normalized_row.get("description"),
+            "amount": normalized_row.get("amount"),
+            "quantity": normalized_row.get("quantity"),
+            "unit_price": normalized_row.get("unit_price"),
+            "country": normalized_row.get("country"),
+            "currency": normalized_row.get("currency"),
+            "invoice": normalized_row.get("invoice"),
+            "stock_code": normalized_row.get("stock_code"),
+            "merchant": normalized_row.get("merchant"),
+            "category": normalized_row.get("category"),
+        })
+
+    users: dict[str, UserTransactions] = {}
+    for cid, txns in grouped.items():
+        parsed = parse_json_transactions(txns, customer_id=cid)
+        if parsed.transactions:
+            users[cid] = parsed
+    return users
 
 
 def load_test_user(customer_id: str) -> UserTransactions:

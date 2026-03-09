@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, Fragment } from "react";
+import { useState, useEffect, useCallback, useMemo, Fragment, useRef } from "react";
 import Papa from "papaparse";
-import { Upload, FileText, Search, Activity, Loader2, Users, PanelLeft, Boxes, ChevronDown, ChevronRight, Square, Trash2 } from "lucide-react";
+import { Upload, FileText, Search, Activity, Loader2, Users, PanelLeft, Boxes, ChevronDown, ChevronRight, Square, Trash2, ArrowUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const CLOUD_FUNCTION_URL = process.env.NODE_ENV === "development"
@@ -46,7 +46,14 @@ export default function Home() {
   // Profile Generator State
   const [genLoading, setGenLoading] = useState(false);
   const [genError, setGenError] = useState("");
-  const [trainSource, setTrainSource] = useState("test-users");
+  const [trainStatus, setTrainStatus] = useState("");
+  const [trainSource, setTrainSource] = useState("uploaded");
+  const [trainUploadFile, setTrainUploadFile] = useState<File | null>(null);
+  const [trainUploadName, setTrainUploadName] = useState("");
+  const [trainUploadSubmitted, setTrainUploadSubmitted] = useState(false);
+  const [pendingUploadedPortfolioName, setPendingUploadedPortfolioName] = useState("");
+  const [uploadedDatasets, setUploadedDatasets] = useState<any[]>([]);
+  const [trainSourceAutoInitialized, setTrainSourceAutoInitialized] = useState(false);
   const [trainK, setTrainK] = useState(10);
   const [catalog, setCatalog] = useState<any>(null);
   const [catalogList, setCatalogList] = useState<any[]>([]);
@@ -57,6 +64,7 @@ export default function Home() {
   const [experimentId, setExperimentId] = useState<string | null>(null);
   const [experimentState, setExperimentState] = useState<any>(null);
   const [experimentPolling, setExperimentPolling] = useState(false);
+  const [experimentStarting, setExperimentStarting] = useState(false);
   const [savedExperiments, setSavedExperiments] = useState<any[]>([]);
   const [selectedSavedExperimentId, setSelectedSavedExperimentId] = useState<string | null>(null);
   const [showExperimentProgress, setShowExperimentProgress] = useState(false);
@@ -64,6 +72,35 @@ export default function Home() {
   // Incentive Set State
   const [incentiveSets, setIncentiveSets] = useState<any[]>([]);
   const [selectedIncentiveSetVersion, setSelectedIncentiveSetVersion] = useState("");
+  const profilerAbortRef = useRef<AbortController | null>(null);
+  const learnXhrRef = useRef<XMLHttpRequest | null>(null);
+  const learnFetchAbortRef = useRef<AbortController | null>(null);
+  const activeLearnUploadNameRef = useRef("");
+  const activeLearnStartedAtRef = useRef("");
+  const learnStopRequestedRef = useRef(false);
+  const experimentStartAbortRef = useRef<AbortController | null>(null);
+  const KMEANS_STATUS_DETAILS = [
+    "Step 1: Standardizing behavior features so dimensions are comparable.",
+    "Step 2: Initializing K centroids in feature space.",
+    "Step 3: Assigning each portfolio to its nearest centroid.",
+    "Step 4: Recomputing centroids from assigned members.",
+    "Step 5: Repeating assign/recompute until clusters stabilize.",
+    "Distance metric: Euclidean distance on normalized features.",
+    "Centroid meaning: average behavior vector for a profile group.",
+    "Higher K creates more granular profiles with smaller groups.",
+    "Lower K creates broader profiles with larger groups.",
+    "Recency and cadence features influence activity-based separation.",
+    "Spend intensity features shape value-tier separation.",
+    "Refund/return features isolate cancellation-heavy behavior.",
+    "Temporal spread helps separate bursty vs steady shoppers.",
+    "Outlier clipping keeps extreme values from dominating clusters.",
+    "Population share is computed from cluster membership counts.",
+    "Profile labels are generated from learned centroid patterns.",
+    "Portfolio LTV is aggregated from member-level profile economics.",
+    "Final model stores centroids, dispersion, and scaling params.",
+    "Catalog versioning preserves reproducibility for assignments.",
+    "Post-train, portfolios are assignable to nearest learned profile.",
+  ];
 
   // Load test user IDs on mount
   useEffect(() => {
@@ -96,6 +133,8 @@ export default function Home() {
 
   const analyzeTestUser = async () => {
     if (!selectedUserId) return;
+    const controller = new AbortController();
+    profilerAbortRef.current = controller;
     setLoading(true);
     setLoadingStep("Profiling with Gemini...");
     setError("");
@@ -105,6 +144,7 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_id: selectedUserId }),
+        signal: controller.signal,
       });
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
@@ -114,15 +154,20 @@ export default function Home() {
       const data = await res.json();
       setResults(data);
     } catch (err: any) {
-      setError(err.message || "An error occurred");
+      if (err?.name !== "AbortError") {
+        setError(err.message || "An error occurred");
+      }
     } finally {
       setLoading(false);
       setLoadingStep("");
+      profilerAbortRef.current = null;
     }
   };
 
   const processFile = async () => {
     if (!file) return;
+    const controller = new AbortController();
+    profilerAbortRef.current = controller;
 
     setLoading(true);
     setError("");
@@ -136,39 +181,298 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ transactions, customer_id: customerId }),
+        signal: controller.signal,
       });
 
       if (!res.ok) throw new Error("Failed to analyze transactions");
       const data = await res.json();
       setResults(data);
     } catch (err: any) {
-      setError(err.message || "An error occurred");
+      if (err?.name !== "AbortError") {
+        setError(err.message || "An error occurred");
+      }
     } finally {
       setLoading(false);
+      profilerAbortRef.current = null;
     }
+  };
+
+  const stopProfilerProcess = () => {
+    if (profilerAbortRef.current) {
+      profilerAbortRef.current.abort();
+      profilerAbortRef.current = null;
+    }
+    setLoading(false);
+    setLoadingStep("");
+    setResults(null);
+    setError("");
+  };
+
+  const postJsonWithUploadProgress = (
+    url: string,
+    body: any,
+    onProgress: (pct: number) => void,
+    onUploadComplete: () => void,
+    timeoutMs = 180000,
+  ) => {
+    return new Promise<any>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      learnXhrRef.current = xhr;
+      xhr.open("POST", url, true);
+      xhr.setRequestHeader("Content-Type", "application/json");
+      xhr.timeout = timeoutMs;
+
+      xhr.upload.onprogress = (evt) => {
+        if (!evt.lengthComputable) return;
+        const pct = Math.max(0, Math.min(100, Math.round((evt.loaded / evt.total) * 100)));
+        onProgress(pct);
+      };
+      xhr.upload.onload = () => onUploadComplete();
+      xhr.ontimeout = () => {
+        learnXhrRef.current = null;
+        reject(new Error("Training request timed out after 3 minutes. Try a smaller file."));
+      };
+      xhr.onerror = () => {
+        learnXhrRef.current = null;
+        reject(new Error("Network error during upload"));
+      };
+      xhr.onload = () => {
+        learnXhrRef.current = null;
+        const raw = xhr.responseText || "";
+        let data: any = {};
+        try { data = raw ? JSON.parse(raw) : {}; } catch { /* ignore */ }
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(data);
+        } else {
+          reject(new Error(data.error || "Training failed"));
+        }
+      };
+
+      xhr.send(JSON.stringify(body));
+    });
+  };
+
+  const startBackendElapsedStatus = (label: string, details: string[] = []) => {
+    const started = Date.now();
+    let tickCount = 0;
+    const tick = () => {
+      const secs = Math.max(0, Math.floor((Date.now() - started) / 1000));
+      let text = label;
+      if (details.length > 0) {
+        if (tickCount === 0) {
+          text = label;
+        } else {
+          text = details[(tickCount - 1) % details.length];
+        }
+      }
+      setTrainStatus(`${text} (${secs}s elapsed)`);
+    };
+    tick();
+    const timer = setInterval(() => {
+      tickCount += 1;
+      tick();
+    }, 2200);
+    return () => clearInterval(timer);
   };
 
   // ---- Profile Generator handlers ----
   const trainProfiles = async () => {
+    learnStopRequestedRef.current = false;
     setGenLoading(true);
     setGenError("");
+    setTrainStatus("Starting...");
+    let stopElapsedStatus: (() => void) | null = null;
+    activeLearnStartedAtRef.current = new Date().toISOString();
     try {
-      const res = await fetch(`${CLOUD_FUNCTION_URL}/train_profiles`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ source: trainSource, k: trainK }),
-      });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || "Training failed");
+      let body: any = { source: trainSource, k: trainK };
+      let currentUploadName = "";
+
+      if (trainSource === "uploaded") {
+        setTrainStatus("Preparing upload...");
+        if (!trainUploadFile) {
+          throw new Error("Upload a transaction CSV file to train profiles");
+        }
+        currentUploadName = trainUploadName.trim();
+        activeLearnUploadNameRef.current = currentUploadName;
+        if (!currentUploadName) {
+          throw new Error("Enter a name for this upload");
+        }
+
+        const csvText = await trainUploadFile.text();
+        if (!csvText.trim()) {
+          throw new Error("Upload file is empty");
+        }
+        setTrainUploadSubmitted(true);
+        body = {
+          source: "uploaded",
+          k: trainK,
+          upload_name: currentUploadName,
+          csv_text: csvText,
+        };
+        setTrainStatus("Uploading... 0%");
+      } else {
+        setTrainStatus("Training...");
       }
-      const data = await res.json();
+
+      let data: any;
+      if (trainSource === "uploaded") {
+        data = await postJsonWithUploadProgress(
+          `${CLOUD_FUNCTION_URL}/learn_profiles`,
+          body,
+          (pct) => setTrainStatus(`Uploading... ${pct}%`),
+          () => {
+            setPendingUploadedPortfolioName(currentUploadName);
+            setTrainSource("uploaded-pending");
+            setTrainStatus("Upload complete. Starting K-Means clustering...");
+            stopElapsedStatus = startBackendElapsedStatus(
+              "Learning profiles with K-Means clustering.",
+              KMEANS_STATUS_DETAILS,
+            );
+          },
+          180000,
+        );
+      } else {
+        setTrainStatus("Submitting learn request...");
+        stopElapsedStatus = startBackendElapsedStatus(
+          "Learning profiles with K-Means clustering.",
+          KMEANS_STATUS_DETAILS,
+        );
+        const controller = new AbortController();
+        learnFetchAbortRef.current = controller;
+        const timeoutId = setTimeout(() => controller.abort(), 180000);
+        let res: Response;
+        try {
+          res = await fetch(`${CLOUD_FUNCTION_URL}/learn_profiles`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+            signal: controller.signal,
+          });
+        } finally {
+          clearTimeout(timeoutId);
+          learnFetchAbortRef.current = null;
+        }
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || "Training failed");
+        }
+        data = await res.json();
+      }
       setCatalog(data);
+      if (data?.upload_dataset_id) {
+        setPendingUploadedPortfolioName("");
+        setTrainSource(`uploaded-dataset:${data.upload_dataset_id}`);
+      }
+      if (stopElapsedStatus) {
+        stopElapsedStatus();
+        stopElapsedStatus = null;
+      }
+      setTrainStatus("Learn complete.");
       setSelectedCatalogVersion(data.version);
       setGeneratorTab("catalog");
       fetchCatalogList();
+      fetchUploadedDatasets();
     } catch (err: any) {
-      setGenError(err.message || "Training failed");
+      if (learnStopRequestedRef.current) {
+        setGenError("");
+      } else if (err?.name === "AbortError") {
+        setGenError("Training request timed out after 3 minutes. Try a smaller file.");
+      } else {
+        setGenError(err.message || "Training failed");
+      }
+    } finally {
+      if (stopElapsedStatus) stopElapsedStatus();
+      learnXhrRef.current = null;
+      learnFetchAbortRef.current = null;
+      activeLearnUploadNameRef.current = "";
+      activeLearnStartedAtRef.current = "";
+      learnStopRequestedRef.current = false;
+      setGenLoading(false);
+      setTrainStatus("");
+      setTrainUploadSubmitted(false);
+    }
+  };
+
+  const cleanupStoppedLearnData = async () => {
+    const uploadName = activeLearnUploadNameRef.current.trim();
+    const startedAt = activeLearnStartedAtRef.current;
+    if (!uploadName || !startedAt) return;
+
+    try {
+      const res = await fetch(`${CLOUD_FUNCTION_URL}/list_uploaded_training_datasets`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const datasets = data.datasets || [];
+      const startedMs = Date.parse(startedAt);
+      const candidates = datasets.filter((d: any) => {
+        const sameName = String(d.upload_name || "").trim() === uploadName;
+        const createdMs = Date.parse(String(d.created_at || ""));
+        return sameName && Number.isFinite(createdMs) && createdMs >= (startedMs - 10000);
+      });
+      for (const d of candidates) {
+        await fetch(`${CLOUD_FUNCTION_URL}/delete_portfolio_dataset/${d.dataset_id}`, { method: "DELETE" });
+      }
+      await fetchUploadedDatasets();
+      await fetchCatalogList();
+    } catch {
+      // best-effort cleanup only
+    }
+  };
+
+  const stopLearnProcess = async () => {
+    learnStopRequestedRef.current = true;
+    if (learnXhrRef.current) {
+      learnXhrRef.current.abort();
+      learnXhrRef.current = null;
+    }
+    if (learnFetchAbortRef.current) {
+      learnFetchAbortRef.current.abort();
+      learnFetchAbortRef.current = null;
+    }
+    await cleanupStoppedLearnData();
+    setGenLoading(false);
+    setTrainStatus("");
+    setTrainUploadSubmitted(false);
+    setPendingUploadedPortfolioName("");
+    setTrainSource("uploaded");
+  };
+
+  const deleteSelectedPortfolio = async () => {
+    if (!trainSource.startsWith("uploaded-dataset:")) return;
+    const datasetId = trainSource.split(":", 2)[1] || "";
+    if (!datasetId) return;
+
+    const ok = window.confirm("Delete this portfolio and all associated learned catalogs/experiments?");
+    if (!ok) return;
+
+    setGenLoading(true);
+    setGenError("");
+    try {
+      const res = await fetch(`${CLOUD_FUNCTION_URL}/delete_portfolio_dataset/${datasetId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || "Failed to delete portfolio dataset");
+      }
+
+      const listRes = await fetch(`${CLOUD_FUNCTION_URL}/list_uploaded_training_datasets`);
+      if (listRes.ok) {
+        const data = await listRes.json();
+        const datasets = data.datasets || [];
+        setUploadedDatasets(datasets);
+        if (datasets.length > 0) {
+          setTrainSource(`uploaded-dataset:${datasets[0].dataset_id}`);
+        } else {
+          setTrainSource("uploaded");
+        }
+      } else {
+        setTrainSource("uploaded");
+      }
+
+      fetchCatalogList();
+    } catch (err: any) {
+      setGenError(err.message || "Failed to delete portfolio dataset");
     } finally {
       setGenLoading(false);
     }
@@ -188,6 +492,21 @@ export default function Home() {
         }
       }
     } catch { /* silent */ }
+  };
+
+  const fetchUploadedDatasets = async () => {
+    try {
+      const res = await fetch(`${CLOUD_FUNCTION_URL}/list_uploaded_training_datasets`);
+      if (res.ok) {
+        const data = await res.json();
+        setUploadedDatasets(data.datasets || []);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        setGenError(errData.error || "Failed to load uploaded datasets. Redeploy backend/hosting rewrites if this endpoint is missing.");
+      }
+    } catch {
+      setGenError("Failed to load uploaded datasets. Check backend availability.");
+    }
   };
 
   const loadCatalog = async (version?: string) => {
@@ -210,10 +529,39 @@ export default function Home() {
   useEffect(() => {
     if (activeView === "generator") {
       fetchCatalogList();
+      fetchUploadedDatasets();
     }
   }, [activeView]);
 
-  // Load a catalog when switching to Catalog/Experiment tab:
+  // Default to Upload source when no uploaded datasets are available
+  useEffect(() => {
+    if (!trainUploadFile && uploadedDatasets.length === 0 && trainSource !== "uploaded" && trainSource !== "uploaded-pending") {
+      setTrainSource("uploaded");
+    }
+  }, [trainUploadFile, uploadedDatasets, trainSource]);
+
+  // When datasets exist, default to the latest one unless a valid saved dataset is already selected
+  useEffect(() => {
+    if (uploadedDatasets.length === 0) return;
+    const firstDatasetId = String(uploadedDatasets[0]?.dataset_id || "");
+    if (!firstDatasetId) return;
+
+    if (trainSource === "uploaded" && !trainSourceAutoInitialized && !trainUploadFile) {
+      setTrainSource(`uploaded-dataset:${firstDatasetId}`);
+      setTrainSourceAutoInitialized(true);
+      return;
+    }
+
+    if (trainSource.startsWith("uploaded-dataset:")) {
+      const selectedId = trainSource.split(":", 2)[1] || "";
+      const exists = uploadedDatasets.some((d: any) => d.dataset_id === selectedId);
+      if (!exists) {
+        setTrainSource(`uploaded-dataset:${firstDatasetId}`);
+      }
+    }
+  }, [uploadedDatasets, trainSource, trainSourceAutoInitialized, trainUploadFile]);
+
+  // Load a catalog when switching to Catalog/Optimize tab:
   // - If a version is already selected, reload that version (preserves selection across tabs)
   // - Otherwise, load the latest catalog
   useEffect(() => {
@@ -229,13 +577,13 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeView, generatorTab]);
 
-  // Experiment polling logic
+  // Optimize polling logic
   useEffect(() => {
     if (!experimentId || !experimentPolling) return;
 
     const poll = async () => {
       try {
-        const res = await fetch(`${CLOUD_FUNCTION_URL}/experiment_status/${experimentId}`);
+        const res = await fetch(`${CLOUD_FUNCTION_URL}/optimize_status/${experimentId}`);
         if (res.ok) {
           const data = await res.json();
           setExperimentState(data);
@@ -244,9 +592,9 @@ export default function Home() {
             setExperimentPolling(false);
             // Auto-save on completion or cancellation (with partial results)
             if (data.status === "completed" || data.status === "cancelled") {
-              fetch(`${CLOUD_FUNCTION_URL}/save_experiment/${experimentId}`, { method: "POST" })
+              fetch(`${CLOUD_FUNCTION_URL}/save_optimize/${experimentId}`, { method: "POST" })
                 .then(() => fetchSavedExperiments(selectedCatalogVersion || undefined))
-                .catch(() => {});
+                .catch(() => { });
             }
           }
         }
@@ -263,74 +611,100 @@ export default function Home() {
   const startExperiment = async () => {
     if (!selectedCatalogVersion) return;
 
+    const controller = new AbortController();
+    experimentStartAbortRef.current = controller;
     setGenLoading(true);
+    setExperimentStarting(true);
     setGenError("");
     setExperimentState(null);
     setExperimentId(null);
     setShowExperimentProgress(true);
 
     try {
-      const res = await fetch(`${CLOUD_FUNCTION_URL}/start_experiment`, {
+      const res = await fetch(`${CLOUD_FUNCTION_URL}/start_optimize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           catalog_version: selectedCatalogVersion,
           incentive_set_version: selectedIncentiveSetVersion || undefined,
         }),
+        signal: controller.signal,
       });
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || "Failed to start experiment");
+        throw new Error(errData.error || "Failed to start optimization");
       }
       const data = await res.json();
       setExperimentId(data.experiment_id);
       setExperimentPolling(true);
     } catch (err: any) {
-      setGenError(err.message || "Failed to start experiment");
+      if (err?.name !== "AbortError") {
+        setGenError(err.message || "Failed to start optimization");
+      }
     } finally {
+      experimentStartAbortRef.current = null;
+      setExperimentStarting(false);
       setGenLoading(false);
     }
   };
 
   const stopExperiment = async () => {
-    if (!experimentId) return;
+    if (experimentStartAbortRef.current) {
+      experimentStartAbortRef.current.abort();
+      experimentStartAbortRef.current = null;
+    }
+    if (!experimentId) {
+      setExperimentStarting(false);
+      setGenLoading(false);
+      setShowExperimentProgress(false);
+      return;
+    }
     try {
-      await fetch(`${CLOUD_FUNCTION_URL}/cancel_experiment/${experimentId}`, { method: "POST" });
+      await fetch(`${CLOUD_FUNCTION_URL}/cancel_optimize/${experimentId}`, { method: "POST" });
+      await fetch(`${CLOUD_FUNCTION_URL}/delete_optimize/${experimentId}`, { method: "DELETE" });
     } catch {
       // silently fail
+    } finally {
+      setExperimentPolling(false);
+      setExperimentState(null);
+      setExperimentId(null);
+      setSelectedSavedExperimentId(null);
+      fetchSavedExperiments(selectedCatalogVersion || undefined);
+      setExperimentStarting(false);
+      setGenLoading(false);
     }
   };
 
   const saveExperiment = async () => {
     if (!experimentId) return;
     try {
-      const res = await fetch(`${CLOUD_FUNCTION_URL}/save_experiment/${experimentId}`, { method: "POST" });
+      const res = await fetch(`${CLOUD_FUNCTION_URL}/save_optimize/${experimentId}`, { method: "POST" });
       if (res.ok) {
         setGenError("");
       }
     } catch {
-      setGenError("Failed to save experiment");
+      setGenError("Failed to save optimization");
     }
   };
 
   const deleteExperiment = async () => {
     if (!experimentId) return;
     try {
-      await fetch(`${CLOUD_FUNCTION_URL}/delete_experiment/${experimentId}`, { method: "DELETE" });
+      await fetch(`${CLOUD_FUNCTION_URL}/delete_optimize/${experimentId}`, { method: "DELETE" });
       setExperimentState(null);
       setExperimentId(null);
       setSelectedSavedExperimentId(null);
       fetchSavedExperiments(selectedCatalogVersion || undefined);
     } catch {
-      setGenError("Failed to delete experiment");
+      setGenError("Failed to delete optimization");
     }
   };
 
   const fetchSavedExperiments = async (catalogVersion?: string) => {
     try {
       const url = catalogVersion
-        ? `${CLOUD_FUNCTION_URL}/list_experiments?catalog_version=${catalogVersion}`
-        : `${CLOUD_FUNCTION_URL}/list_experiments`;
+        ? `${CLOUD_FUNCTION_URL}/list_optimizations?catalog_version=${catalogVersion}`
+        : `${CLOUD_FUNCTION_URL}/list_optimizations`;
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
@@ -373,7 +747,7 @@ export default function Home() {
       setShowExperimentProgress(false);
     }
     try {
-      const res = await fetch(`${CLOUD_FUNCTION_URL}/load_experiment/${expId}`);
+      const res = await fetch(`${CLOUD_FUNCTION_URL}/load_optimize/${expId}`);
       if (res.ok) {
         const data = await res.json();
         setExperimentState(data);
@@ -525,12 +899,16 @@ export default function Home() {
 
                             <div className="mt-auto flex items-center gap-4 pt-4">
                               <button
-                                onClick={analyzeTestUser}
-                                disabled={!selectedUserId || loading}
-                                className="rounded-md bg-black px-6 py-2 text-sm font-semibold text-white hover:opacity-80 disabled:opacity-50 flex items-center gap-2 shrink-0"
+                                onClick={loading ? stopProfilerProcess : analyzeTestUser}
+                                disabled={!selectedUserId}
+                                aria-label="Submit"
+                                title={loading ? "Stop" : "Submit"}
+                                className="rounded-full bg-black w-8 h-8 text-white hover:opacity-80 disabled:opacity-50 flex items-center justify-center shrink-0"
                               >
-                                {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-                                Analyze
+                                {loading
+                                  ? <Square className="h-3.5 w-3.5" />
+                                  : <ArrowUp className="h-4 w-4" strokeWidth={2.25} />
+                                }
                               </button>
                               {loading && <InlineAnalyzingIndicator />}
                             </div>
@@ -567,12 +945,16 @@ export default function Home() {
 
                         <div className="mt-auto flex items-center gap-4 pt-4">
                           <button
-                            onClick={() => processFile()}
-                            disabled={!file || loading}
-                            className="rounded-md bg-black px-6 py-2 text-sm font-semibold text-white hover:opacity-80 disabled:opacity-50 flex items-center gap-2 shrink-0"
+                            onClick={loading ? stopProfilerProcess : () => processFile()}
+                            disabled={!file}
+                            aria-label="Submit"
+                            title={loading ? "Stop" : "Submit"}
+                            className="rounded-full bg-black w-8 h-8 text-white hover:opacity-80 disabled:opacity-50 flex items-center justify-center shrink-0"
                           >
-                            {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-                            Analyze
+                            {loading
+                              ? <Square className="h-3.5 w-3.5" />
+                              : <ArrowUp className="h-4 w-4" strokeWidth={2.25} />
+                            }
                           </button>
                           {loading && <InlineAnalyzingIndicator />}
                         </div>
@@ -604,13 +986,25 @@ export default function Home() {
               <ProfileGeneratorView
                 genLoading={genLoading}
                 genError={genError}
+                trainStatus={trainStatus}
                 generatorTab={generatorTab}
                 setGeneratorTab={setGeneratorTab}
                 trainSource={trainSource}
                 setTrainSource={setTrainSource}
+                trainUploadName={trainUploadName}
+                setTrainUploadName={setTrainUploadName}
+                trainUploadFile={trainUploadFile}
+                setTrainUploadFile={setTrainUploadFile}
+                trainUploadSubmitted={trainUploadSubmitted}
+                setTrainUploadSubmitted={setTrainUploadSubmitted}
+                pendingUploadedPortfolioName={pendingUploadedPortfolioName}
+                setPendingUploadedPortfolioName={setPendingUploadedPortfolioName}
+                uploadedDatasets={uploadedDatasets}
+                deleteSelectedPortfolio={deleteSelectedPortfolio}
                 trainK={trainK}
                 setTrainK={setTrainK}
                 trainProfiles={trainProfiles}
+                stopLearnProcess={stopLearnProcess}
                 catalog={catalog}
                 catalogList={catalogList}
                 selectedCatalogVersion={selectedCatalogVersion}
@@ -623,6 +1017,7 @@ export default function Home() {
                 deleteExperiment={deleteExperiment}
                 deleteCatalog={deleteCatalog}
                 experimentState={experimentState}
+                experimentStarting={experimentStarting}
                 showExperimentProgress={showExperimentProgress}
                 savedExperiments={savedExperiments}
                 selectedSavedExperimentId={selectedSavedExperimentId}
@@ -644,20 +1039,29 @@ export default function Home() {
 // Profile Generator View
 // ========================================================
 function ProfileGeneratorView({
-  genLoading, genError, generatorTab, setGeneratorTab,
-  trainSource, setTrainSource, trainK, setTrainK, trainProfiles,
+  genLoading, genError, trainStatus, generatorTab, setGeneratorTab,
+  trainSource, setTrainSource, trainUploadName, setTrainUploadName, trainUploadFile, setTrainUploadFile, trainUploadSubmitted, setTrainUploadSubmitted, pendingUploadedPortfolioName, setPendingUploadedPortfolioName, uploadedDatasets, deleteSelectedPortfolio, trainK, setTrainK, trainProfiles, stopLearnProcess,
   catalog, catalogList, selectedCatalogVersion, setSelectedCatalogVersion, loadCatalog,
   expandedProfile, setExpandedProfile,
   startExperiment, stopExperiment, deleteExperiment, deleteCatalog,
-  experimentState, showExperimentProgress,
+  experimentState, experimentStarting, showExperimentProgress,
   savedExperiments, selectedSavedExperimentId, loadSavedExperiment, fetchSavedExperiments,
   incentiveSets, selectedIncentiveSetVersion, setSelectedIncentiveSetVersion,
 }: any) {
   const [showAllIncentives, setShowAllIncentives] = useState(false);
+  const onTrainFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files?.[0]) return;
+    const selected = e.target.files[0];
+    setTrainUploadFile(selected);
+    if (!trainUploadName.trim()) {
+      const stripped = selected.name.replace(/\.[^/.]+$/, "");
+      setTrainUploadName(stripped);
+    }
+  };
   const tabs: { key: string; label: string }[] = [
-    { key: "train", label: "Training" },
+    { key: "train", label: "Learn" },
     { key: "catalog", label: "Catalog" },
-    { key: "experiment", label: "Experiment" },
+    { key: "experiment", label: "Optimize" },
   ];
 
   return (
@@ -692,49 +1096,127 @@ function ProfileGeneratorView({
           {generatorTab === "train" && (
             <div className="space-y-6">
               <div>
-                <h3 className="text-lg font-semibold text-slate-900 mb-1">Train Canonical Profiles</h3>
+                <h3 className="text-lg font-semibold text-slate-900 mb-1">Learn Profiles</h3>
                 <p className="text-sm text-slate-500">Learn behavioral profiles from transaction data using K-Means clustering.</p>
               </div>
 
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">Data Source</label>
-                  <select
-                    value={trainSource}
-                    onChange={(e) => setTrainSource(e.target.value)}
-                    className="rounded-md border px-3 py-2 text-sm bg-white w-full"
-                  >
-                    <option value="test-users">Test Users (20 users, Firestore)</option>
-                  </select>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Portfolio</label>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={trainSource}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        setTrainSource(next);
+                        if (next !== "uploaded-pending") {
+                          setPendingUploadedPortfolioName("");
+                        }
+                        if (next === "uploaded") {
+                          setTrainUploadSubmitted(false);
+                          setTrainUploadName("");
+                        }
+                      }}
+                      className="rounded-md border px-3 py-2 text-sm bg-white w-full"
+                    >
+                      {uploadedDatasets.map((d: any) => (
+                        <option key={d.dataset_id} value={`uploaded-dataset:${d.dataset_id}`}>
+                          {d.upload_name || d.dataset_id} ({d.row_count || 0} rows)
+                        </option>
+                      ))}
+                      {pendingUploadedPortfolioName && (
+                        <option value="uploaded-pending">
+                          {pendingUploadedPortfolioName}
+                        </option>
+                      )}
+                      <option value="uploaded">Upload new portfolio</option>
+                    </select>
+                    {trainSource.startsWith("uploaded-dataset:") && (
+                      <button
+                        onClick={deleteSelectedPortfolio}
+                        className="rounded-md border border-red-200 p-2 text-red-500 hover:bg-red-50 hover:text-red-600 transition-colors"
+                        title="Delete selected portfolio and associated data"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="mt-4">
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Number of Profiles (K): <span className="font-bold text-black">{trainK}</span>
+                    </label>
+                    <input
+                      type="range"
+                      min={3}
+                      max={15}
+                      value={trainK}
+                      onChange={(e) => setTrainK(parseInt(e.target.value))}
+                      className="w-full accent-black"
+                    />
+                    <div className="flex justify-between text-xs text-slate-400 mt-1">
+                      <span>3</span>
+                      <span>15</span>
+                    </div>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Number of Profiles (K): <span className="font-bold text-black">{trainK}</span>
-                  </label>
-                  <input
-                    type="range"
-                    min={3}
-                    max={15}
-                    value={trainK}
-                    onChange={(e) => setTrainK(parseInt(e.target.value))}
-                    className="w-full accent-black"
-                  />
-                  <div className="flex justify-between text-xs text-slate-400 mt-1">
-                    <span>3</span>
-                    <span>15</span>
-                  </div>
+                <div className="space-y-4">
+                  {trainSource === "uploaded" && !trainUploadSubmitted && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Portfolio Name</label>
+                        <input
+                          type="text"
+                          value={trainUploadName}
+                          onChange={(e) => setTrainUploadName(e.target.value)}
+                          className="rounded-md border px-3 py-2 text-sm bg-white w-full"
+                          placeholder="e.g., Q1 2026 Retail Transactions"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Transaction File</label>
+                        <label className="flex cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed border-slate-300 py-4 hover:border-blue-500 hover:bg-slate-50 transition-colors">
+                          <div className="text-center px-3">
+                            <Upload className="mx-auto h-5 w-5 text-slate-400 mb-1" />
+                            <span className="text-sm text-slate-600">Click or drag CSV here</span>
+                          </div>
+                          <input
+                            type="file"
+                            accept=".csv,text/csv"
+                            className="hidden"
+                            onChange={onTrainFileChange}
+                          />
+                        </label>
+                        {trainUploadFile && (
+                          <p className="mt-2 text-xs text-slate-500 truncate">{trainUploadFile.name}</p>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
-              <button
-                onClick={trainProfiles}
-                disabled={genLoading}
-                className="rounded-md bg-black px-6 py-2.5 text-sm font-semibold text-white hover:opacity-80 disabled:opacity-50 flex items-center gap-2"
-              >
-                {genLoading && <Loader2 className="h-4 w-4 animate-spin" />}
-                Train
-              </button>
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={genLoading ? stopLearnProcess : trainProfiles}
+                  aria-label="Submit"
+                  title={genLoading ? "Stop" : "Submit"}
+                  className="rounded-full bg-black w-8 h-8 text-white hover:opacity-80 disabled:opacity-50 flex items-center justify-center"
+                >
+                  {genLoading
+                    ? <Square className="h-3.5 w-3.5" />
+                    : <ArrowUp className="h-4 w-4" strokeWidth={2.25} />
+                  }
+                </button>
+                {genLoading && (
+                  <span className="text-sm text-slate-600 flex items-center gap-2">
+                    <img src="/linex-animated.svg" alt="Linex" className="h-5 w-5" />
+                    <span>{trainStatus || "Working..."}</span>
+                  </span>
+                )}
+              </div>
             </div>
           )}
 
@@ -928,10 +1410,10 @@ function ProfileGeneratorView({
             </div>
           )}
 
-          {/* Experiment Panel */}
+          {/* Optimize Panel */}
           {generatorTab === "experiment" && (
             <div className="space-y-6">
-              <h3 className="text-lg font-semibold text-slate-900">Portfolio Optimization Experiment</h3>
+              <h3 className="text-lg font-semibold text-slate-900">Portfolio Optimization</h3>
               {catalogList.length > 0 && (
                 <div className="flex items-center gap-2">
                   <label className="text-sm text-slate-500 shrink-0">Select profile:</label>
@@ -980,24 +1462,61 @@ function ProfileGeneratorView({
               ) : (
                 <div className="space-y-6 border-t border-slate-200 pt-6">
 
-                  <div className="flex items-center">
-                    {experimentState?.status === "running" ? (
+                  <div className="flex items-center gap-3">
+                    {(experimentState?.status === "running" || experimentStarting) ? (
                       <button
                         onClick={stopExperiment}
-                        className="rounded-md bg-red-600 px-6 py-2.5 text-sm font-semibold text-white hover:opacity-80 flex items-center gap-2"
+                        aria-label="Stop"
+                        title="Stop"
+                        className="rounded-full bg-black w-8 h-8 text-white hover:opacity-80 flex items-center justify-center"
                       >
-                        <Square className="h-4 w-4" />
-                        Stop
+                        <Square className="h-3.5 w-3.5" />
                       </button>
                     ) : (
                       <button
                         onClick={startExperiment}
                         disabled={genLoading}
-                        className="rounded-md bg-black px-6 py-2.5 text-sm font-semibold text-white hover:opacity-80 disabled:opacity-50 flex items-center gap-2"
+                        aria-label="Submit"
+                        title="Submit"
+                        className="rounded-full bg-black w-8 h-8 text-white hover:opacity-80 disabled:opacity-50 flex items-center justify-center"
                       >
-                        {genLoading && <Loader2 className="h-4 w-4 animate-spin" />}
-                        Optimize
+                        {genLoading
+                          ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          : <ArrowUp className="h-4 w-4" strokeWidth={2.25} />
+                        }
                       </button>
+                    )}
+                    {experimentState && showExperimentProgress && (
+                      <div className="min-w-0 flex-1 max-w-[520px]">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className={cn(
+                            "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider shrink-0",
+                            experimentState.status === "running" ? "bg-blue-100 text-blue-700" :
+                              experimentState.status === "completed" ? "bg-green-100 text-green-700" :
+                                experimentState.status === "cancelled" ? "bg-amber-100 text-amber-700" :
+                                  "bg-red-100 text-red-700"
+                          )}>
+                            {experimentState.status}
+                          </span>
+                          <div className="text-xs font-mono text-slate-500 shrink-0">{experimentState.progress}%</div>
+                        </div>
+                        <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                          <div
+                            className={cn(
+                              "h-full rounded-full transition-all duration-500",
+                              experimentState.status === "failed"
+                                ? "bg-red-500"
+                                : experimentState.status === "cancelled"
+                                  ? "bg-amber-500"
+                                  : "bg-blue-600"
+                            )}
+                            style={{ width: `${experimentState.progress}%` }}
+                          />
+                        </div>
+                        <div className="text-xs text-slate-600 mt-1 truncate">
+                          {experimentState.current_step}
+                        </div>
+                      </div>
                     )}
                   </div>
 
@@ -1022,37 +1541,6 @@ function ProfileGeneratorView({
 
                   {experimentState && (
                     <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm space-y-6">
-                      {showExperimentProgress && (
-                        <>
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-3">
-                              <h4 className="font-semibold text-slate-900">Optimization Progress</h4>
-                              <span className={cn(
-                                "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider",
-                                experimentState.status === "running" ? "bg-blue-100 text-blue-700" :
-                                  experimentState.status === "completed" ? "bg-green-100 text-green-700" :
-                                    experimentState.status === "cancelled" ? "bg-amber-100 text-amber-700" :
-                                      "bg-red-100 text-red-700"
-                              )}>
-                                {experimentState.status}
-                              </span>
-                            </div>
-                            <div className="text-sm font-mono text-slate-500">{experimentState.progress}%</div>
-                          </div>
-
-                          <div className="w-full bg-slate-100 rounded-full h-2 mb-4 overflow-hidden">
-                            <div
-                              className={cn("h-full rounded-full transition-all duration-500", experimentState.status === 'failed' ? 'bg-red-500' : experimentState.status === 'cancelled' ? 'bg-amber-500' : 'bg-blue-600')}
-                              style={{ width: `${experimentState.progress}%` }}
-                            />
-                          </div>
-
-                          <div className="text-sm text-slate-600 mb-6">
-                            {experimentState.current_step}
-                          </div>
-                        </>
-                      )}
-
                       {experimentState.status === "failed" && (
                         <div className="rounded-md bg-red-50 p-4 text-red-700 text-sm">
                           Error: {experimentState.error}
@@ -1406,4 +1894,3 @@ export function ProfileAssignmentView({ assignment }: { assignment: any }) {
     </div>
   );
 }
-

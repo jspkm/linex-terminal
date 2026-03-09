@@ -43,6 +43,8 @@ class ProfileCatalog(BaseModel):
     config_hash: str = ""
     total_training_population: int = 0  # total users in training set
     source: str = ""  # "retail" | "test-users"
+    upload_dataset_id: str = ""  # Firestore portfolio_datasets/<id>
+    upload_dataset_name: str = ""  # user-provided upload label
     dataset_max_date: datetime | None = None  # max transaction date in training set
 
 

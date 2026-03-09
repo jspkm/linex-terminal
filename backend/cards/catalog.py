@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 import firebase_admin
-from firebase_admin import credentials, firestore
+from firebase_admin import credentials, firestore, get_app
 
 from config import FIREBASE_CREDENTIALS_PATH
 
@@ -66,12 +66,20 @@ class CardCatalog:
     def _load_cards(path: str | None) -> list[dict]:
         import os
         # Try Firebase first
-        if not firebase_admin._apps:
+        try:
+            get_app()
+        except ValueError:
             if FIREBASE_CREDENTIALS_PATH and os.path.exists(FIREBASE_CREDENTIALS_PATH):
                 cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
-                firebase_admin.initialize_app(cred)
+                try:
+                    firebase_admin.initialize_app(cred)
+                except ValueError:
+                    pass
             else:
-                firebase_admin.initialize_app()  # Uses Application Default Credentials
+                try:
+                    firebase_admin.initialize_app()  # Uses Application Default Credentials
+                except ValueError:
+                    pass
         
         db = firestore.client()
         docs = db.collection('known_cards').stream()

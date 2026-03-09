@@ -21,6 +21,7 @@ from analysis.preprocessor import (
     clean_transactions,
     load_test_user,
     parse_json_transactions,
+    parse_training_records,
 )
 from cards.catalog import CardCatalog
 from config import CARDS_PATH, TEST_USERS_DIR
@@ -291,6 +292,8 @@ from profile_generator.firestore_client import (
     fs_save_incentive_set, fs_load_incentive_set,
     fs_list_incentive_sets, fs_get_default_incentive_set,
     fs_set_default_incentive_set, fs_delete_incentive_set,
+    fs_save_uploaded_training_dataset, fs_list_uploaded_training_datasets,
+    fs_load_uploaded_training_dataset, fs_delete_portfolio_dataset_cascade,
 )
 from models.incentive_set import Incentive, IncentiveSet
 from models.transaction import UserTransactions
@@ -354,16 +357,65 @@ def _load_retail_users(limit: int = 0) -> dict[str, UserTransactions]:
     return result
 
 
-@app.route("/linexonewhitelabeler/us-central1/train_profiles", methods=["POST"])
-def train_profiles_endpoint():
+@app.route("/linexonewhitelabeler/us-central1/learn_profiles", methods=["POST"])
+def learn_profiles_endpoint():
     try:
         data = request.get_json(silent=True) or {}
-        source = data.get("source", "test-users")
+        source = str(data.get("source", "test-users") or "test-users")
         k = data.get("k", DEFAULT_K)
         limit = data.get("limit", 0)
+        upload_name = str(data.get("upload_name", "")).strip()
+        upload_csv_text = str(data.get("csv_text", "") or "")
+        upload_transactions = data.get("transactions", [])
+        upload_dataset_id = ""
 
         # Load transactions
-        if source == "retail":
+        if source == "uploaded":
+            raw_rows: list[dict] = []
+            if upload_csv_text.strip():
+                reader = csv.DictReader(io.StringIO(upload_csv_text))
+                raw_rows = [row for row in reader]
+            elif isinstance(upload_transactions, list):
+                raw_rows = upload_transactions
+
+            if not raw_rows:
+                return jsonify({"error": "No uploaded transactions provided"}), 400
+
+            users = parse_training_records(raw_rows, default_customer_id=upload_name)
+            if not users:
+                return jsonify({"error": "No valid user transactions found in uploaded data"}), 400
+            parsed_txn_count = sum(len(u.transactions) for u in users.values())
+            upload_dataset_id = fs_save_uploaded_training_dataset(
+                upload_name=upload_name,
+                transactions=raw_rows if not upload_csv_text.strip() else None,
+                csv_text=upload_csv_text,
+                parsed_user_count=len(users),
+                parsed_transaction_count=parsed_txn_count,
+            )
+            source = f"upload:{upload_name}" if upload_name else f"upload:{upload_dataset_id}"
+        elif source.startswith("uploaded-dataset:"):
+            selected_dataset_id = source.split(":", 1)[1].strip()
+            if not selected_dataset_id:
+                return jsonify({"error": "Missing uploaded dataset id"}), 400
+            dataset = fs_load_uploaded_training_dataset(selected_dataset_id)
+            if not dataset:
+                return jsonify({"error": "Uploaded dataset not found"}), 404
+            raw_rows: list[dict] = []
+            dataset_csv_text = str(dataset.get("csv_text", "") or "")
+            if dataset_csv_text:
+                reader = csv.DictReader(io.StringIO(dataset_csv_text))
+                raw_rows = [row for row in reader]
+            elif isinstance(dataset.get("rows"), list):
+                raw_rows = dataset.get("rows") or []
+            if not raw_rows:
+                return jsonify({"error": "Selected uploaded dataset has no rows"}), 400
+            users = parse_training_records(raw_rows, default_customer_id="")
+            if not users:
+                return jsonify({"error": "No valid user transactions found in selected uploaded dataset"}), 400
+            upload_dataset_id = selected_dataset_id
+            upload_name = str(dataset.get("upload_name", "")).strip()
+            source = f"upload:{upload_name}" if upload_name else f"upload:{upload_dataset_id}"
+        elif source == "retail":
             users = _load_retail_users(limit=limit)
         else:
             users = _load_all_test_users()
@@ -385,6 +437,9 @@ def train_profiles_endpoint():
 
         # Train
         catalog = _train_profiles(feature_df, k=k, source=source, dataset_max_date=global_max)
+        if upload_dataset_id:
+            catalog.upload_dataset_id = upload_dataset_id
+            catalog.upload_dataset_name = upload_name
 
         # Save
         save_catalog(catalog)
@@ -449,6 +504,15 @@ def list_profile_catalogs_endpoint():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/linexonewhitelabeler/us-central1/list_uploaded_training_datasets", methods=["GET"])
+def list_uploaded_training_datasets_endpoint():
+    try:
+        datasets = fs_list_uploaded_training_datasets()
+        return jsonify({"datasets": datasets})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 
 
 
@@ -470,8 +534,8 @@ def fork_catalog_endpoint():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/linexonewhitelabeler/us-central1/start_experiment", methods=["POST"])
-def start_experiment_endpoint():
+@app.route("/linexonewhitelabeler/us-central1/start_optimize", methods=["POST"])
+def start_optimize_endpoint():
     try:
         data = request.get_json(silent=True) or {}
         catalog_version = data.get("catalog_version", "")
@@ -493,19 +557,19 @@ def start_experiment_endpoint():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/linexonewhitelabeler/us-central1/experiment_status/<experiment_id>", methods=["GET"])
-def get_experiment_status_endpoint(experiment_id):
+@app.route("/linexonewhitelabeler/us-central1/optimize_status/<experiment_id>", methods=["GET"])
+def get_optimize_status_endpoint(experiment_id):
     try:
         state = get_experiment_status(experiment_id)
         if not state:
-            return jsonify({"error": "Experiment not found"}), 404
+            return jsonify({"error": "Optimization not found"}), 404
             
         return jsonify(state.model_dump(mode="json"))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/linexonewhitelabeler/us-central1/list_experiments", methods=["GET"])
-def list_experiments_endpoint():
+@app.route("/linexonewhitelabeler/us-central1/list_optimizations", methods=["GET"])
+def list_optimizations_endpoint():
     try:
         catalog_version = request.args.get("catalog_version")
         experiments = list_experiments(catalog_version or None)
@@ -513,42 +577,42 @@ def list_experiments_endpoint():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/linexonewhitelabeler/us-central1/load_experiment/<experiment_id>", methods=["GET"])
-def load_experiment_endpoint(experiment_id):
+@app.route("/linexonewhitelabeler/us-central1/load_optimize/<experiment_id>", methods=["GET"])
+def load_optimize_endpoint(experiment_id):
     try:
         state = load_experiment(experiment_id)
         if not state:
-            return jsonify({"error": "Experiment not found"}), 404
+            return jsonify({"error": "Optimization not found"}), 404
         return jsonify(state.model_dump(mode="json"))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/linexonewhitelabeler/us-central1/cancel_experiment/<experiment_id>", methods=["POST"])
-def cancel_experiment_endpoint(experiment_id):
+@app.route("/linexonewhitelabeler/us-central1/cancel_optimize/<experiment_id>", methods=["POST"])
+def cancel_optimize_endpoint(experiment_id):
     try:
         ok = cancel_experiment(experiment_id)
         if not ok:
-            return jsonify({"error": "Experiment not found or not running"}), 404
+            return jsonify({"error": "Optimization not found or not running"}), 404
         return jsonify({"cancelled": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/linexonewhitelabeler/us-central1/save_experiment/<experiment_id>", methods=["POST"])
-def save_experiment_endpoint(experiment_id):
+@app.route("/linexonewhitelabeler/us-central1/save_optimize/<experiment_id>", methods=["POST"])
+def save_optimize_endpoint(experiment_id):
     try:
         path = save_experiment(experiment_id)
         if not path:
-            return jsonify({"error": "Experiment not found or not in a saveable state"}), 404
+            return jsonify({"error": "Optimization not found or not in a saveable state"}), 404
         return jsonify({"saved": True, "path": path})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/linexonewhitelabeler/us-central1/delete_experiment/<experiment_id>", methods=["DELETE"])
-def delete_experiment_endpoint(experiment_id):
+@app.route("/linexonewhitelabeler/us-central1/delete_optimize/<experiment_id>", methods=["DELETE"])
+def delete_optimize_endpoint(experiment_id):
     try:
         ok = delete_experiment(experiment_id)
         if not ok:
-            return jsonify({"error": "Experiment not found"}), 404
+            return jsonify({"error": "Optimization not found"}), 404
         return jsonify({"deleted": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -560,6 +624,17 @@ def delete_catalog_endpoint(version):
         if not ok:
             return jsonify({"error": "Catalog not found"}), 404
         return jsonify({"deleted": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/linexonewhitelabeler/us-central1/delete_portfolio_dataset/<dataset_id>", methods=["DELETE"])
+def delete_portfolio_dataset_endpoint(dataset_id):
+    try:
+        result = fs_delete_portfolio_dataset_cascade(dataset_id)
+        if not result:
+            return jsonify({"error": "Portfolio dataset not found"}), 404
+        return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -653,18 +728,22 @@ if __name__ == "__main__":
     print("  - POST /linexonewhitelabeler/us-central1/ask_test_user")
     print("  - POST /linexonewhitelabeler/us-central1/ask_qu")
     print("  Profile Generator:")
-    print("  - POST /linexonewhitelabeler/us-central1/train_profiles")
+    print("  - POST /linexonewhitelabeler/us-central1/learn_profiles")
     print("  - POST /linexonewhitelabeler/us-central1/assign_profile")
     print("  - GET  /linexonewhitelabeler/us-central1/profile_catalog")
     print("  - GET  /linexonewhitelabeler/us-central1/list_profile_catalogs")
+    print("  - GET  /linexonewhitelabeler/us-central1/list_uploaded_training_datasets")
     print("  - POST /linexonewhitelabeler/us-central1/fork_catalog")
-    print("  Experiments:")
-    print("  - POST /linexonewhitelabeler/us-central1/start_experiment")
-    print("  - GET  /linexonewhitelabeler/us-central1/experiment_status/<id>")
-    print("  - POST /linexonewhitelabeler/us-central1/cancel_experiment/<id>")
-    print("  - POST /linexonewhitelabeler/us-central1/save_experiment/<id>")
-    print("  - DEL  /linexonewhitelabeler/us-central1/delete_experiment/<id>")
+    print("  Optimize:")
+    print("  - POST /linexonewhitelabeler/us-central1/start_optimize")
+    print("  - GET  /linexonewhitelabeler/us-central1/optimize_status/<id>")
+    print("  - GET  /linexonewhitelabeler/us-central1/list_optimizations")
+    print("  - GET  /linexonewhitelabeler/us-central1/load_optimize/<id>")
+    print("  - POST /linexonewhitelabeler/us-central1/cancel_optimize/<id>")
+    print("  - POST /linexonewhitelabeler/us-central1/save_optimize/<id>")
+    print("  - DEL  /linexonewhitelabeler/us-central1/delete_optimize/<id>")
     print("  - DEL  /linexonewhitelabeler/us-central1/delete_catalog/<version>")
+    print("  - DEL  /linexonewhitelabeler/us-central1/delete_portfolio_dataset/<dataset_id>")
     print("  Incentive Sets:")
     print("  - GET  /linexonewhitelabeler/us-central1/list_incentive_sets")
     print("  - GET  /linexonewhitelabeler/us-central1/incentive_set")
@@ -673,4 +752,3 @@ if __name__ == "__main__":
     print("  - POST /linexonewhitelabeler/us-central1/set_default_incentive_set/<version>")
     print("  - DEL  /linexonewhitelabeler/us-central1/delete_incentive_set/<version>")
     app.run(host="127.0.0.1", port=5050, debug=False)
-
