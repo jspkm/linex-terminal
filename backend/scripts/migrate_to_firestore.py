@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from config import PROFILE_CATALOG_DIR, EXPERIMENT_DIR
 from models.profile_catalog import ProfileCatalog
-from profile_generator.experiment import ExperimentState
+from profile_generator.optimization import ExperimentState
 from profile_generator.firestore_client import (
     fs_save_catalog,
     fs_save_experiment,

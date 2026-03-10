@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 const CLOUD_FUNCTION_URL = process.env.NODE_ENV === "development"
   ? "http://127.0.0.1:5050/linexonewhitelabeler/us-central1"
   : "/api";
+const OPTIMIZATION_CACHE_STORAGE_KEY = "linex.optimizationCache.v2";
 
 // FR-2A: Behavioral axes — mirrors backend CORE_AXES
 const BEHAVIORAL_AXES: { axis: string; label: string; features: string[] }[] = [
@@ -20,12 +21,12 @@ const PRIMARY_FEATURES = new Set(BEHAVIORAL_AXES.map(a => a.features[0]));
 
 type View = "profiler" | "generator";
 type ProfilerTab = "test" | "upload";
-type GeneratorTab = "train" | "catalog" | "experiment";
+type GeneratorTab = "learn" | "catalog" | "optimize";
 
 export default function Home() {
   const [activeView, setActiveView] = useState<View>("profiler");
   const [profilerTab, setProfilerTab] = useState<ProfilerTab>("test");
-  const [generatorTab, setGeneratorTab] = useState<GeneratorTab>("train");
+  const [generatorTab, setGeneratorTab] = useState<GeneratorTab>("learn");
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   // Test Users State
@@ -46,62 +47,91 @@ export default function Home() {
   // Profile Generator State
   const [genLoading, setGenLoading] = useState(false);
   const [genError, setGenError] = useState("");
-  const [trainStatus, setTrainStatus] = useState("");
-  const [trainSource, setTrainSource] = useState("uploaded");
-  const [trainUploadFile, setTrainUploadFile] = useState<File | null>(null);
-  const [trainUploadName, setTrainUploadName] = useState("");
-  const [trainUploadSubmitted, setTrainUploadSubmitted] = useState(false);
+  const [learnStatus, setLearnStatus] = useState("");
+  const [learnInProgress, setLearnInProgress] = useState(false);
+  const [learnSource, setLearnSource] = useState("uploaded");
+  const [learnUploadFile, setLearnUploadFile] = useState<File | null>(null);
+  const [learnUploadName, setLearnUploadName] = useState("");
+  const [learnUploadSubmitted, setLearnUploadSubmitted] = useState(false);
   const [pendingUploadedPortfolioName, setPendingUploadedPortfolioName] = useState("");
   const [uploadedDatasets, setUploadedDatasets] = useState<any[]>([]);
-  const [trainSourceAutoInitialized, setTrainSourceAutoInitialized] = useState(false);
-  const [trainK, setTrainK] = useState(10);
+  const [learnSourceAutoInitialized, setLearnSourceAutoInitialized] = useState(false);
+  const [learnK, setLearnK] = useState(10);
   const [catalog, setCatalog] = useState<any>(null);
   const [catalogList, setCatalogList] = useState<any[]>([]);
   const [selectedCatalogVersion, setSelectedCatalogVersion] = useState("");
   const [expandedProfile, setExpandedProfile] = useState<string | null>(null);
 
-  // Experiment State
-  const [experimentId, setExperimentId] = useState<string | null>(null);
-  const [experimentState, setExperimentState] = useState<any>(null);
-  const [experimentPolling, setExperimentPolling] = useState(false);
-  const [experimentStarting, setExperimentStarting] = useState(false);
-  const [savedExperiments, setSavedExperiments] = useState<any[]>([]);
-  const [selectedSavedExperimentId, setSelectedSavedExperimentId] = useState<string | null>(null);
-  const [showExperimentProgress, setShowExperimentProgress] = useState(false);
+  // Optimization State
+  const [optimizationId, setOptimizationId] = useState<string | null>(null);
+  const [optimizationState, setOptimizationState] = useState<any>(null);
+  const [optimizationPolling, setOptimizationPolling] = useState(false);
+  const [optimizationStarting, setOptimizationStarting] = useState(false);
+  const [optimizeInProgress, setOptimizeInProgress] = useState(false);
+  const [optimizationStopPhase, setOptimizationStopPhase] = useState<"idle" | "cancelling" | "cleaning">("idle");
+  const [savedOptimizations, setSavedOptimizations] = useState<any[]>([]);
+  const [selectedSavedOptimizationId, setSelectedSavedOptimizationId] = useState<string | null>(null);
+  const [showOptimizationProgress, setShowOptimizationProgress] = useState(false);
 
   // Incentive Set State
   const [incentiveSets, setIncentiveSets] = useState<any[]>([]);
   const [selectedIncentiveSetVersion, setSelectedIncentiveSetVersion] = useState("");
+  const [selectedIncentiveSetDetail, setSelectedIncentiveSetDetail] = useState<any>(null);
+  const [incentiveSetDetailLoading, setIncentiveSetDetailLoading] = useState(false);
   const profilerAbortRef = useRef<AbortController | null>(null);
   const learnXhrRef = useRef<XMLHttpRequest | null>(null);
   const learnFetchAbortRef = useRef<AbortController | null>(null);
   const activeLearnUploadNameRef = useRef("");
   const activeLearnStartedAtRef = useRef("");
   const learnStopRequestedRef = useRef(false);
-  const experimentStartAbortRef = useRef<AbortController | null>(null);
-  const KMEANS_STATUS_DETAILS = [
-    "Step 1: Standardizing behavior features so dimensions are comparable.",
-    "Step 2: Initializing K centroids in feature space.",
-    "Step 3: Assigning each portfolio to its nearest centroid.",
-    "Step 4: Recomputing centroids from assigned members.",
-    "Step 5: Repeating assign/recompute until clusters stabilize.",
-    "Distance metric: Euclidean distance on normalized features.",
-    "Centroid meaning: average behavior vector for a profile group.",
-    "Higher K creates more granular profiles with smaller groups.",
-    "Lower K creates broader profiles with larger groups.",
-    "Recency and cadence features influence activity-based separation.",
-    "Spend intensity features shape value-tier separation.",
-    "Refund/return features isolate cancellation-heavy behavior.",
-    "Temporal spread helps separate bursty vs steady shoppers.",
-    "Outlier clipping keeps extreme values from dominating clusters.",
-    "Population share is computed from cluster membership counts.",
-    "Profile labels are generated from learned centroid patterns.",
-    "Portfolio LTV is aggregated from member-level profile economics.",
-    "Final model stores centroids, dispersion, and scaling params.",
-    "Catalog versioning preserves reproducibility for assignments.",
-    "Post-train, portfolios are assignable to nearest learned profile.",
-  ];
+  const optimizationStartAbortRef = useRef<AbortController | null>(null);
+  const optimizationStopRequestedRef = useRef(false);
+  const optimizationCacheRef = useRef<Record<string, any>>({});
+  const optimizationLatestByCatalogRef = useRef<Record<string, string>>({});
+  const savedOptimizationsFetchSeqRef = useRef(0);
+  const loadOptimizationFetchSeqRef = useRef(0);
+  const optimizationCacheBootstrappedRef = useRef(false);
 
+  if (!optimizationCacheBootstrappedRef.current && typeof window !== "undefined") {
+    optimizationCacheBootstrappedRef.current = true;
+    try {
+      const raw = localStorage.getItem(OPTIMIZATION_CACHE_STORAGE_KEY)
+        || sessionStorage.getItem("linex.optimizationCache.v1");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.cache && typeof parsed.cache === "object") {
+          optimizationCacheRef.current = parsed.cache;
+        }
+        if (parsed?.latestByCatalog && typeof parsed.latestByCatalog === "object") {
+          optimizationLatestByCatalogRef.current = parsed.latestByCatalog;
+        }
+      }
+    } catch {
+      // ignore browser cache read errors
+    }
+  }
+
+  const updateOptimizationCache = useCallback((optimizationData: any, persist = false) => {
+    const optimizationKey = String(optimizationData?.optimization_id || "");
+    if (!optimizationKey) return;
+    optimizationCacheRef.current[optimizationKey] = optimizationData;
+    const catalogKey = String(optimizationData?.catalog_version || "");
+    if (catalogKey) {
+      optimizationLatestByCatalogRef.current[catalogKey] = optimizationKey;
+    }
+    if (persist) {
+      try {
+        const payload = JSON.stringify({
+          cache: optimizationCacheRef.current,
+          latestByCatalog: optimizationLatestByCatalogRef.current,
+        });
+        localStorage.setItem(OPTIMIZATION_CACHE_STORAGE_KEY, payload);
+        sessionStorage.setItem("linex.optimizationCache.v1", payload);
+      } catch {
+        // best-effort browser cache only
+      }
+    }
+  }, []);
   // Load test user IDs on mount
   useEffect(() => {
     fetchTestUsers();
@@ -208,47 +238,41 @@ export default function Home() {
     setError("");
   };
 
-  const postJsonWithUploadProgress = (
-    url: string,
-    body: any,
+  const putFileToSignedUrlWithProgress = (
+    uploadUrl: string,
+    file: File,
+    requiredHeaders: Record<string, string>,
     onProgress: (pct: number) => void,
-    onUploadComplete: () => void,
-    timeoutMs = 180000,
+    timeoutMs = 540000,
   ) => {
-    return new Promise<any>((resolve, reject) => {
+    return new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       learnXhrRef.current = xhr;
-      xhr.open("POST", url, true);
-      xhr.setRequestHeader("Content-Type", "application/json");
+      xhr.open("PUT", uploadUrl, true);
+      Object.entries(requiredHeaders || {}).forEach(([k, v]) => xhr.setRequestHeader(k, v));
       xhr.timeout = timeoutMs;
-
       xhr.upload.onprogress = (evt) => {
         if (!evt.lengthComputable) return;
         const pct = Math.max(0, Math.min(100, Math.round((evt.loaded / evt.total) * 100)));
         onProgress(pct);
       };
-      xhr.upload.onload = () => onUploadComplete();
       xhr.ontimeout = () => {
         learnXhrRef.current = null;
-        reject(new Error("Training request timed out after 3 minutes. Try a smaller file."));
+        reject(new Error("Upload transfer timed out after 9 minutes."));
       };
       xhr.onerror = () => {
         learnXhrRef.current = null;
-        reject(new Error("Network error during upload"));
+        reject(new Error("Network error during upload transfer"));
       };
       xhr.onload = () => {
         learnXhrRef.current = null;
-        const raw = xhr.responseText || "";
-        let data: any = {};
-        try { data = raw ? JSON.parse(raw) : {}; } catch { /* ignore */ }
         if (xhr.status >= 200 && xhr.status < 300) {
-          resolve(data);
+          resolve();
         } else {
-          reject(new Error(data.error || "Training failed"));
+          reject(new Error(`Upload transfer failed (HTTP ${xhr.status})`));
         }
       };
-
-      xhr.send(JSON.stringify(body));
+      xhr.send(file);
     });
   };
 
@@ -257,6 +281,9 @@ export default function Home() {
     let tickCount = 0;
     const tick = () => {
       const secs = Math.max(0, Math.floor((Date.now() - started) / 1000));
+      const duration = secs < 60
+        ? `${secs}s`
+        : `${Math.floor(secs / 60)}m ${String(secs % 60).padStart(2, "0")}s`;
       let text = label;
       if (details.length > 0) {
         if (tickCount === 0) {
@@ -265,7 +292,7 @@ export default function Home() {
           text = details[(tickCount - 1) % details.length];
         }
       }
-      setTrainStatus(`${text} (${secs}s elapsed)`);
+      setLearnStatus(`${text} ${duration}`);
     };
     tick();
     const timer = setInterval(() => {
@@ -275,99 +302,188 @@ export default function Home() {
     return () => clearInterval(timer);
   };
 
+  const sleepWithAbort = (ms: number, signal: AbortSignal) =>
+    new Promise<void>((resolve, reject) => {
+      if (signal.aborted) {
+        reject(new DOMException("Aborted", "AbortError"));
+        return;
+      }
+      const timer = setTimeout(() => {
+        signal.removeEventListener("abort", onAbort);
+        resolve();
+      }, ms);
+      const onAbort = () => {
+        clearTimeout(timer);
+        reject(new DOMException("Aborted", "AbortError"));
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+    });
+
+  const postLearnProfilesWithRetry = async (body: any, controller: AbortController) => {
+    const maxAttempts = 6;
+    let res: Response | null = null;
+    let lastNetworkError: any = null;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        res = await fetch(`${CLOUD_FUNCTION_URL}/learn_profiles`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+      } catch (err: any) {
+        if (err?.name === "AbortError") throw err;
+        lastNetworkError = err;
+        if (attempt === maxAttempts) {
+          throw err;
+        }
+        setLearnStatus(`Learning... temporary network issue, retrying (${attempt}/${maxAttempts - 1})`);
+        await sleepWithAbort(2000 * attempt, controller.signal);
+        continue;
+      }
+      if (res.ok) return res;
+      if (![502, 503, 504].includes(res.status) || attempt === maxAttempts) {
+        return res;
+      }
+      setLearnStatus(`Connecting to learning service... retry ${attempt}/${maxAttempts - 1}`);
+      await sleepWithAbort(2000 * attempt, controller.signal);
+    }
+    if (lastNetworkError) throw lastNetworkError;
+    return res as Response;
+  };
+
   // ---- Profile Generator handlers ----
-  const trainProfiles = async () => {
+  const learnProfiles = async () => {
     learnStopRequestedRef.current = false;
+    setLearnInProgress(true);
     setGenLoading(true);
     setGenError("");
-    setTrainStatus("Starting...");
+    setLearnStatus("Starting...");
     let stopElapsedStatus: (() => void) | null = null;
     activeLearnStartedAtRef.current = new Date().toISOString();
     try {
-      let body: any = { source: trainSource, k: trainK };
+      let body: any = { source: learnSource, k: learnK };
       let currentUploadName = "";
 
-      if (trainSource === "uploaded") {
-        setTrainStatus("Preparing upload...");
-        if (!trainUploadFile) {
-          throw new Error("Upload a transaction CSV file to train profiles");
+      if (learnSource === "uploaded") {
+        setLearnStatus("Preparing upload...");
+        if (!learnUploadFile) {
+          throw new Error("Upload a transaction CSV file to learn profiles");
         }
-        currentUploadName = trainUploadName.trim();
+        currentUploadName = learnUploadName.trim();
         activeLearnUploadNameRef.current = currentUploadName;
         if (!currentUploadName) {
           throw new Error("Enter a name for this upload");
         }
 
-        const csvText = await trainUploadFile.text();
-        if (!csvText.trim()) {
-          throw new Error("Upload file is empty");
+        const uploadUrlRes = await fetch(`${CLOUD_FUNCTION_URL}/create_portfolio_upload_url`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            upload_name: currentUploadName,
+            file_name: learnUploadFile.name,
+            content_type: learnUploadFile.type || "text/csv",
+            size_bytes: learnUploadFile.size,
+          }),
+        });
+        if (!uploadUrlRes.ok) {
+          const errData = await uploadUrlRes.json().catch(() => ({}));
+          throw new Error(errData.error || "Failed to prepare upload");
         }
-        setTrainUploadSubmitted(true);
+        const uploadMeta = await uploadUrlRes.json();
+        const datasetId = String(uploadMeta.dataset_id || "");
+        const uploadUrl = String(uploadMeta.upload_url || "");
+        const requiredHeaders = uploadMeta.required_headers || {};
+        if (!datasetId || !uploadUrl) {
+          throw new Error("Upload initialization response missing dataset_id/upload_url");
+        }
+
+        setLearnStatus("Uploading... 0%");
+        await putFileToSignedUrlWithProgress(
+          uploadUrl,
+          learnUploadFile,
+          requiredHeaders,
+          (pct) => setLearnStatus(`Uploading... ${pct}%`),
+          540000,
+        );
+        setLearnUploadSubmitted(true);
         body = {
           source: "uploaded",
-          k: trainK,
+          k: learnK,
+          upload_dataset_id: datasetId,
           upload_name: currentUploadName,
-          csv_text: csvText,
         };
-        setTrainStatus("Uploading... 0%");
       } else {
-        setTrainStatus("Training...");
+        setLearnStatus("Learning...");
       }
 
       let data: any;
-      if (trainSource === "uploaded") {
-        data = await postJsonWithUploadProgress(
-          `${CLOUD_FUNCTION_URL}/learn_profiles`,
-          body,
-          (pct) => setTrainStatus(`Uploading... ${pct}%`),
-          () => {
-            setPendingUploadedPortfolioName(currentUploadName);
-            setTrainSource("uploaded-pending");
-            setTrainStatus("Upload complete. Starting K-Means clustering...");
-            stopElapsedStatus = startBackendElapsedStatus(
-              "Learning profiles with K-Means clustering.",
-              KMEANS_STATUS_DETAILS,
-            );
-          },
-          180000,
-        );
-      } else {
-        setTrainStatus("Submitting learn request...");
-        stopElapsedStatus = startBackendElapsedStatus(
-          "Learning profiles with K-Means clustering.",
-          KMEANS_STATUS_DETAILS,
-        );
+      if (learnSource === "uploaded") {
+        setPendingUploadedPortfolioName(currentUploadName);
+        setLearnSource("uploaded-pending");
+        setLearnStatus("Upload complete. Connecting to learning service...");
+        stopElapsedStatus = startBackendElapsedStatus("Learning...");
         const controller = new AbortController();
         learnFetchAbortRef.current = controller;
-        const timeoutId = setTimeout(() => controller.abort(), 180000);
+        const timeoutId = setTimeout(() => controller.abort(), 540000);
         let res: Response;
         try {
-          res = await fetch(`${CLOUD_FUNCTION_URL}/learn_profiles`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-            signal: controller.signal,
-          });
+          res = await postLearnProfilesWithRetry(body, controller);
         } finally {
           clearTimeout(timeoutId);
           learnFetchAbortRef.current = null;
         }
         if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error || "Training failed");
+          const raw = await res.text().catch(() => "");
+          const looksLikeHtmlError = /<!doctype html|<html/i.test(raw);
+          let errData: any = {};
+          if (!looksLikeHtmlError) {
+            try { errData = raw ? JSON.parse(raw) : {}; } catch { /* ignore */ }
+          }
+          const detail = looksLikeHtmlError ? "" : String(errData?.error || raw || "").trim();
+          const msg = detail
+            ? `Learning failed (${res.status}): ${detail}`
+            : `Learning failed (${res.status}): Service temporarily unavailable. Please retry.`;
+          throw new Error(msg);
+        }
+        data = await res.json();
+      } else {
+        stopElapsedStatus = startBackendElapsedStatus("Learning...");
+        const controller = new AbortController();
+        learnFetchAbortRef.current = controller;
+        const timeoutId = setTimeout(() => controller.abort(), 540000);
+        let res: Response;
+        try {
+          res = await postLearnProfilesWithRetry(body, controller);
+        } finally {
+          clearTimeout(timeoutId);
+          learnFetchAbortRef.current = null;
+        }
+        if (!res.ok) {
+          const raw = await res.text().catch(() => "");
+          const looksLikeHtmlError = /<!doctype html|<html/i.test(raw);
+          let errData: any = {};
+          if (!looksLikeHtmlError) {
+            try { errData = raw ? JSON.parse(raw) : {}; } catch { /* ignore */ }
+          }
+          const detail = looksLikeHtmlError ? "" : String(errData?.error || raw || "").trim();
+          const msg = detail
+            ? `Learning failed (${res.status}): ${detail}`
+            : `Learning failed (${res.status}): Service temporarily unavailable. Please retry.`;
+          throw new Error(msg);
         }
         data = await res.json();
       }
       setCatalog(data);
       if (data?.upload_dataset_id) {
         setPendingUploadedPortfolioName("");
-        setTrainSource(`uploaded-dataset:${data.upload_dataset_id}`);
+        setLearnSource(`uploaded-dataset:${data.upload_dataset_id}`);
       }
       if (stopElapsedStatus) {
         stopElapsedStatus();
         stopElapsedStatus = null;
       }
-      setTrainStatus("Learn complete.");
+      setLearnStatus("Learn complete.");
       setSelectedCatalogVersion(data.version);
       setGeneratorTab("catalog");
       fetchCatalogList();
@@ -376,9 +492,9 @@ export default function Home() {
       if (learnStopRequestedRef.current) {
         setGenError("");
       } else if (err?.name === "AbortError") {
-        setGenError("Training request timed out after 3 minutes. Try a smaller file.");
+        setGenError("Learning request timed out after 9 minutes. Try a smaller file.");
       } else {
-        setGenError(err.message || "Training failed");
+        setGenError(err.message || "Learning failed");
       }
     } finally {
       if (stopElapsedStatus) stopElapsedStatus();
@@ -388,8 +504,9 @@ export default function Home() {
       activeLearnStartedAtRef.current = "";
       learnStopRequestedRef.current = false;
       setGenLoading(false);
-      setTrainStatus("");
-      setTrainUploadSubmitted(false);
+      setLearnStatus("");
+      setLearnUploadSubmitted(false);
+      setLearnInProgress(false);
     }
   };
 
@@ -399,7 +516,7 @@ export default function Home() {
     if (!uploadName || !startedAt) return;
 
     try {
-      const res = await fetch(`${CLOUD_FUNCTION_URL}/list_uploaded_training_datasets`);
+      const res = await fetch(`${CLOUD_FUNCTION_URL}/list_portfolio_datasets`);
       if (!res.ok) return;
       const data = await res.json();
       const datasets = data.datasets || [];
@@ -431,18 +548,20 @@ export default function Home() {
     }
     await cleanupStoppedLearnData();
     setGenLoading(false);
-    setTrainStatus("");
-    setTrainUploadSubmitted(false);
+    setLearnStatus("");
+    setLearnUploadSubmitted(false);
     setPendingUploadedPortfolioName("");
-    setTrainSource("uploaded");
+    setLearnSource("uploaded");
+    setLearnInProgress(false);
   };
 
   const deleteSelectedPortfolio = async () => {
-    if (!trainSource.startsWith("uploaded-dataset:")) return;
-    const datasetId = trainSource.split(":", 2)[1] || "";
+    if (learnInProgress || optimizeInProgress) return;
+    if (!learnSource.startsWith("uploaded-dataset:")) return;
+    const datasetId = learnSource.split(":", 2)[1] || "";
     if (!datasetId) return;
 
-    const ok = window.confirm("Delete this portfolio and all associated learned catalogs/experiments?");
+    const ok = window.confirm("Delete this portfolio and all associated learned catalogs/optimizations?");
     if (!ok) return;
 
     setGenLoading(true);
@@ -456,18 +575,18 @@ export default function Home() {
         throw new Error(errData.error || "Failed to delete portfolio dataset");
       }
 
-      const listRes = await fetch(`${CLOUD_FUNCTION_URL}/list_uploaded_training_datasets`);
+      const listRes = await fetch(`${CLOUD_FUNCTION_URL}/list_portfolio_datasets`);
       if (listRes.ok) {
         const data = await listRes.json();
         const datasets = data.datasets || [];
         setUploadedDatasets(datasets);
         if (datasets.length > 0) {
-          setTrainSource(`uploaded-dataset:${datasets[0].dataset_id}`);
+          setLearnSource(`uploaded-dataset:${datasets[0].dataset_id}`);
         } else {
-          setTrainSource("uploaded");
+          setLearnSource("uploaded");
         }
       } else {
-        setTrainSource("uploaded");
+        setLearnSource("uploaded");
       }
 
       fetchCatalogList();
@@ -485,10 +604,20 @@ export default function Home() {
         const data = await res.json();
         const catalogs = data.catalogs || [];
         setCatalogList(catalogs);
-        // Default to latest catalog if nothing selected yet
-        if (!selectedCatalogVersion && catalogs.length > 0) {
-          setSelectedCatalogVersion(catalogs[0].version);
-          loadCatalog(catalogs[0].version);
+        if (catalogs.length === 0) {
+          setSelectedCatalogVersion("");
+          setCatalog(null);
+          return;
+        }
+
+        const hasSelected = Boolean(
+          selectedCatalogVersion && catalogs.some((c: any) => c.version === selectedCatalogVersion)
+        );
+        if (!hasSelected) {
+          const nextVersion = catalogs[0].version;
+          setSelectedCatalogVersion(nextVersion);
+          setCatalog(null);
+          loadCatalog(nextVersion);
         }
       }
     } catch { /* silent */ }
@@ -496,7 +625,7 @@ export default function Home() {
 
   const fetchUploadedDatasets = async () => {
     try {
-      const res = await fetch(`${CLOUD_FUNCTION_URL}/list_uploaded_training_datasets`);
+      const res = await fetch(`${CLOUD_FUNCTION_URL}/list_portfolio_datasets`);
       if (res.ok) {
         const data = await res.json();
         setUploadedDatasets(data.datasets || []);
@@ -535,10 +664,10 @@ export default function Home() {
 
   // Default to Upload source when no uploaded datasets are available
   useEffect(() => {
-    if (!trainUploadFile && uploadedDatasets.length === 0 && trainSource !== "uploaded" && trainSource !== "uploaded-pending") {
-      setTrainSource("uploaded");
+    if (!learnUploadFile && uploadedDatasets.length === 0 && learnSource !== "uploaded" && learnSource !== "uploaded-pending") {
+      setLearnSource("uploaded");
     }
-  }, [trainUploadFile, uploadedDatasets, trainSource]);
+  }, [learnUploadFile, uploadedDatasets, learnSource]);
 
   // When datasets exist, default to the latest one unless a valid saved dataset is already selected
   useEffect(() => {
@@ -546,56 +675,57 @@ export default function Home() {
     const firstDatasetId = String(uploadedDatasets[0]?.dataset_id || "");
     if (!firstDatasetId) return;
 
-    if (trainSource === "uploaded" && !trainSourceAutoInitialized && !trainUploadFile) {
-      setTrainSource(`uploaded-dataset:${firstDatasetId}`);
-      setTrainSourceAutoInitialized(true);
+    if (learnSource === "uploaded" && !learnSourceAutoInitialized && !learnUploadFile) {
+      setLearnSource(`uploaded-dataset:${firstDatasetId}`);
+      setLearnSourceAutoInitialized(true);
       return;
     }
 
-    if (trainSource.startsWith("uploaded-dataset:")) {
-      const selectedId = trainSource.split(":", 2)[1] || "";
+    if (learnSource.startsWith("uploaded-dataset:")) {
+      const selectedId = learnSource.split(":", 2)[1] || "";
       const exists = uploadedDatasets.some((d: any) => d.dataset_id === selectedId);
       if (!exists) {
-        setTrainSource(`uploaded-dataset:${firstDatasetId}`);
+        setLearnSource(`uploaded-dataset:${firstDatasetId}`);
       }
     }
-  }, [uploadedDatasets, trainSource, trainSourceAutoInitialized, trainUploadFile]);
+  }, [uploadedDatasets, learnSource, learnSourceAutoInitialized, learnUploadFile]);
 
-  // Load a catalog when switching to Catalog/Optimize tab:
-  // - If a version is already selected, reload that version (preserves selection across tabs)
-  // - Otherwise, load the latest catalog
+  // Catalog + optimize bootstrap when switching tabs.
   useEffect(() => {
-    if (activeView === "generator" && (generatorTab === "catalog" || generatorTab === "experiment")) {
+    if (activeView === "generator" && generatorTab === "catalog") {
       loadCatalog(selectedCatalogVersion || undefined);
     }
-    if (activeView === "generator" && generatorTab === "experiment") {
+    if (activeView === "generator" && generatorTab === "optimize") {
       fetchIncentiveSets();
-      if (selectedCatalogVersion) {
-        fetchSavedExperiments(selectedCatalogVersion);
-      }
+      fetchSavedOptimizations(selectedCatalogVersion || undefined);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeView, generatorTab]);
 
   // Optimize polling logic
   useEffect(() => {
-    if (!experimentId || !experimentPolling) return;
+    if (!optimizationId || !optimizationPolling) return;
 
     const poll = async () => {
       try {
-        const res = await fetch(`${CLOUD_FUNCTION_URL}/optimize_status/${experimentId}`);
+          const res = await fetch(`${CLOUD_FUNCTION_URL}/optimize_status/${optimizationId}`);
         if (res.ok) {
           const data = await res.json();
-          setExperimentState(data);
+          if (optimizationStopRequestedRef.current) return;
+          updateOptimizationCache(data, data?.status !== "running");
+          setOptimizationState(data);
 
           if (data.status === "completed" || data.status === "failed" || data.status === "cancelled") {
-            setExperimentPolling(false);
+            setOptimizationPolling(false);
+            setOptimizeInProgress(false);
             // Auto-save on completion or cancellation (with partial results)
             if (data.status === "completed" || data.status === "cancelled") {
-              fetch(`${CLOUD_FUNCTION_URL}/save_optimize/${experimentId}`, { method: "POST" })
-                .then(() => fetchSavedExperiments(selectedCatalogVersion || undefined))
+              fetch(`${CLOUD_FUNCTION_URL}/save_optimize/${optimizationId}`, { method: "POST" })
+                .then(() => fetchSavedOptimizations(selectedCatalogVersion || undefined))
                 .catch(() => { });
             }
+          } else if (data.status === "running") {
+            setOptimizeInProgress(true);
           }
         }
       } catch {
@@ -606,19 +736,22 @@ export default function Home() {
     poll(); // Initial poll
     const interval = setInterval(poll, 2000);
     return () => clearInterval(interval);
-  }, [experimentId, experimentPolling]);
+  }, [optimizationId, optimizationPolling, selectedCatalogVersion, updateOptimizationCache]);
 
-  const startExperiment = async () => {
+  const startOptimization = async () => {
     if (!selectedCatalogVersion) return;
 
+    optimizationStopRequestedRef.current = false;
+    setOptimizationStopPhase("idle");
     const controller = new AbortController();
-    experimentStartAbortRef.current = controller;
+    optimizationStartAbortRef.current = controller;
     setGenLoading(true);
-    setExperimentStarting(true);
+    setOptimizationStarting(true);
+    setOptimizeInProgress(true);
     setGenError("");
-    setExperimentState(null);
-    setExperimentId(null);
-    setShowExperimentProgress(true);
+    setOptimizationState(null);
+    setOptimizationId(null);
+    setShowOptimizationProgress(true);
 
     try {
       const res = await fetch(`${CLOUD_FUNCTION_URL}/start_optimize`, {
@@ -635,50 +768,80 @@ export default function Home() {
         throw new Error(errData.error || "Failed to start optimization");
       }
       const data = await res.json();
-      setExperimentId(data.experiment_id);
-      setExperimentPolling(true);
+      const startedOptimizationId = String(data?.optimization_id || data?.experiment_id || "");
+      if (!startedOptimizationId) {
+        throw new Error("Failed to start optimization: missing optimization_id");
+      }
+      if (optimizationStopRequestedRef.current) {
+        setOptimizationStopPhase("cancelling");
+        await fetch(`${CLOUD_FUNCTION_URL}/cancel_optimize/${startedOptimizationId}`, { method: "POST" }).catch(() => { });
+        setOptimizationStopPhase("cleaning");
+        await fetch(`${CLOUD_FUNCTION_URL}/delete_optimize/${startedOptimizationId}`, { method: "DELETE" }).catch(() => { });
+        setOptimizationPolling(false);
+        setOptimizationState(null);
+        setOptimizationId(null);
+        setSelectedSavedOptimizationId(null);
+        setShowOptimizationProgress(false);
+        setOptimizationStopPhase("idle");
+        setOptimizeInProgress(false);
+        return;
+      }
+      setOptimizationId(startedOptimizationId);
+      setSelectedSavedOptimizationId(startedOptimizationId);
+      setOptimizationPolling(true);
     } catch (err: any) {
       if (err?.name !== "AbortError") {
         setGenError(err.message || "Failed to start optimization");
       }
+      setOptimizationStopPhase("idle");
+      setOptimizeInProgress(false);
     } finally {
-      experimentStartAbortRef.current = null;
-      setExperimentStarting(false);
+      optimizationStartAbortRef.current = null;
+      setOptimizationStarting(false);
       setGenLoading(false);
     }
   };
 
-  const stopExperiment = async () => {
-    if (experimentStartAbortRef.current) {
-      experimentStartAbortRef.current.abort();
-      experimentStartAbortRef.current = null;
+  const stopOptimization = async () => {
+    optimizationStopRequestedRef.current = true;
+    setOptimizationStopPhase("cancelling");
+    setShowOptimizationProgress(true);
+    setOptimizeInProgress(true);
+    if (optimizationStartAbortRef.current) {
+      optimizationStartAbortRef.current.abort();
+      optimizationStartAbortRef.current = null;
     }
-    if (!experimentId) {
-      setExperimentStarting(false);
+    if (!optimizationId) {
+      setOptimizationStarting(false);
       setGenLoading(false);
-      setShowExperimentProgress(false);
+      setShowOptimizationProgress(false);
+      setOptimizationStopPhase("idle");
+      setOptimizeInProgress(false);
       return;
     }
     try {
-      await fetch(`${CLOUD_FUNCTION_URL}/cancel_optimize/${experimentId}`, { method: "POST" });
-      await fetch(`${CLOUD_FUNCTION_URL}/delete_optimize/${experimentId}`, { method: "DELETE" });
+      await fetch(`${CLOUD_FUNCTION_URL}/cancel_optimize/${optimizationId}`, { method: "POST" });
+      setOptimizationStopPhase("cleaning");
+      await fetch(`${CLOUD_FUNCTION_URL}/delete_optimize/${optimizationId}`, { method: "DELETE" });
     } catch {
       // silently fail
     } finally {
-      setExperimentPolling(false);
-      setExperimentState(null);
-      setExperimentId(null);
-      setSelectedSavedExperimentId(null);
-      fetchSavedExperiments(selectedCatalogVersion || undefined);
-      setExperimentStarting(false);
+      setOptimizationPolling(false);
+      setOptimizationState(null);
+      setOptimizationId(null);
+      setSelectedSavedOptimizationId(null);
+      fetchSavedOptimizations(selectedCatalogVersion || undefined);
+      setOptimizationStarting(false);
       setGenLoading(false);
+      setOptimizationStopPhase("idle");
+      setOptimizeInProgress(false);
     }
   };
 
-  const saveExperiment = async () => {
-    if (!experimentId) return;
+  const saveOptimization = async () => {
+    if (!optimizationId) return;
     try {
-      const res = await fetch(`${CLOUD_FUNCTION_URL}/save_optimize/${experimentId}`, { method: "POST" });
+      const res = await fetch(`${CLOUD_FUNCTION_URL}/save_optimize/${optimizationId}`, { method: "POST" });
       if (res.ok) {
         setGenError("");
       }
@@ -687,36 +850,65 @@ export default function Home() {
     }
   };
 
-  const deleteExperiment = async () => {
-    if (!experimentId) return;
+  const deleteOptimization = async () => {
+    if (learnInProgress || optimizeInProgress) return;
+    if (!optimizationId) return;
     try {
-      await fetch(`${CLOUD_FUNCTION_URL}/delete_optimize/${experimentId}`, { method: "DELETE" });
-      setExperimentState(null);
-      setExperimentId(null);
-      setSelectedSavedExperimentId(null);
-      fetchSavedExperiments(selectedCatalogVersion || undefined);
+      await fetch(`${CLOUD_FUNCTION_URL}/delete_optimize/${optimizationId}`, { method: "DELETE" });
+      setOptimizationState(null);
+      setOptimizationId(null);
+      setSelectedSavedOptimizationId(null);
+      fetchSavedOptimizations(selectedCatalogVersion || undefined);
     } catch {
       setGenError("Failed to delete optimization");
     }
   };
 
-  const fetchSavedExperiments = async (catalogVersion?: string) => {
+  const fetchSavedOptimizations = async (catalogVersion?: string) => {
+    const fetchSeq = ++savedOptimizationsFetchSeqRef.current;
     try {
       const url = catalogVersion
         ? `${CLOUD_FUNCTION_URL}/list_optimizations?catalog_version=${catalogVersion}`
         : `${CLOUD_FUNCTION_URL}/list_optimizations`;
       const res = await fetch(url);
       if (res.ok) {
+        if (fetchSeq !== savedOptimizationsFetchSeqRef.current) return;
         const data = await res.json();
-        const exps = data.experiments || [];
-        setSavedExperiments(exps);
-        // Auto-select the latest saved experiment
+        const exps = data.optimizations || [];
+        setSavedOptimizations(exps);
+        // Auto-load the latest terminal optimization only.
+        // Avoid auto-opening stale "running" entries on initial page entry.
         if (exps.length > 0) {
-          loadSavedExperiment(exps[0].experiment_id);
+          const preferred = exps.find((exp: any) =>
+            ["completed", "cancelled", "failed"].includes(String(exp.status || "").toLowerCase())
+          );
+          if (preferred?.optimization_id) {
+            const preferredId = String(preferred.optimization_id);
+            const cached = optimizationCacheRef.current[preferredId];
+            if (cached) {
+              setSelectedSavedOptimizationId(preferredId);
+              setOptimizationState(cached);
+              setOptimizationId(preferredId);
+              setOptimizeInProgress(cached?.status === "running");
+            }
+            if (!(preferredId === selectedSavedOptimizationId && optimizationState)) {
+              loadSavedOptimization(preferredId, { refresh: !cached });
+            }
+          } else {
+            setSelectedSavedOptimizationId(exps[0].optimization_id || null);
+            setOptimizationState(null);
+            setOptimizationId(null);
+            setOptimizationPolling(false);
+            setOptimizeInProgress(false);
+            setShowOptimizationProgress(false);
+          }
         } else {
-          setSelectedSavedExperimentId(null);
-          setExperimentState(null);
-          setExperimentId(null);
+          setSelectedSavedOptimizationId(null);
+          setOptimizationState(null);
+          setOptimizationId(null);
+          setOptimizationPolling(false);
+          setOptimizeInProgress(false);
+          setShowOptimizationProgress(false);
         }
       }
     } catch { /* silent */ }
@@ -740,23 +932,82 @@ export default function Home() {
     } catch { /* silent */ }
   };
 
-  const loadSavedExperiment = async (expId: string) => {
-    setSelectedSavedExperimentId(expId);
-    // Only clear progress when switching to a different experiment
-    if (expId !== experimentId) {
-      setShowExperimentProgress(false);
+  const loadIncentiveSetDetail = async (version?: string) => {
+    setIncentiveSetDetailLoading(true);
+    try {
+      const url = version
+        ? `${CLOUD_FUNCTION_URL}/incentive_set/${version}`
+        : `${CLOUD_FUNCTION_URL}/incentive_set`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        setSelectedIncentiveSetDetail(data);
+      }
+    } catch { /* silent */ }
+    finally { setIncentiveSetDetailLoading(false); }
+  };
+
+  useEffect(() => {
+    if (activeView === "generator" && generatorTab === "optimize") {
+      loadIncentiveSetDetail(selectedIncentiveSetVersion || undefined);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeView, generatorTab, selectedIncentiveSetVersion]);
+
+  const loadSavedOptimization = async (expId: string, options?: { refresh?: boolean }) => {
+    const shouldRefresh = options?.refresh !== false;
+    optimizationStopRequestedRef.current = false;
+    setSelectedSavedOptimizationId(expId);
+    // Only clear progress when switching to a different optimization
+    if (expId !== optimizationId) {
+      setShowOptimizationProgress(false);
+    }
+    const cached = optimizationCacheRef.current[expId];
+    if (cached) {
+      setOptimizationState(cached);
+      setOptimizationId(expId);
+      setOptimizeInProgress(cached?.status === "running");
+    }
+    if (!shouldRefresh && cached?.status !== "running") {
+      return;
+    }
+    const loadSeq = ++loadOptimizationFetchSeqRef.current;
     try {
       const res = await fetch(`${CLOUD_FUNCTION_URL}/load_optimize/${expId}`);
       if (res.ok) {
         const data = await res.json();
-        setExperimentState(data);
-        setExperimentId(expId);
+        if (optimizationStopRequestedRef.current || loadSeq !== loadOptimizationFetchSeqRef.current) return;
+        updateOptimizationCache(data, true);
+        setOptimizationState(data);
+        setOptimizationId(expId);
+        setOptimizeInProgress(data?.status === "running");
       }
     } catch { /* silent */ }
   };
 
+  useEffect(() => {
+    if (activeView !== "generator" || generatorTab !== "optimize" || !selectedCatalogVersion) return;
+    if (optimizeInProgress && optimizationId) return;
+    const cachedOptimizationId = optimizationLatestByCatalogRef.current[selectedCatalogVersion];
+    if (!cachedOptimizationId) return;
+    const cachedState = optimizationCacheRef.current[cachedOptimizationId];
+    if (!cachedState) return;
+    if (optimizationState && optimizationState.catalog_version === selectedCatalogVersion) return;
+    setSelectedSavedOptimizationId(cachedOptimizationId);
+    setOptimizationState(cachedState);
+    setOptimizationId(cachedOptimizationId);
+    setOptimizeInProgress(cachedState?.status === "running");
+  }, [activeView, generatorTab, optimizeInProgress, optimizationId, optimizationState, selectedCatalogVersion]);
+
+  useEffect(() => {
+    if (activeView === "generator" && selectedCatalogVersion) {
+      fetchSavedOptimizations(selectedCatalogVersion);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeView, selectedCatalogVersion]);
+
   const deleteCatalog = async (version: string) => {
+    if (learnInProgress || optimizeInProgress) return;
     if (!confirm(`Delete catalog ${version}? This cannot be undone.`)) return;
     try {
       const res = await fetch(`${CLOUD_FUNCTION_URL}/delete_catalog/${version}`, { method: "DELETE" });
@@ -986,24 +1237,25 @@ export default function Home() {
               <ProfileGeneratorView
                 genLoading={genLoading}
                 genError={genError}
-                trainStatus={trainStatus}
+                learnStatus={learnStatus}
+                learnInProgress={learnInProgress}
                 generatorTab={generatorTab}
                 setGeneratorTab={setGeneratorTab}
-                trainSource={trainSource}
-                setTrainSource={setTrainSource}
-                trainUploadName={trainUploadName}
-                setTrainUploadName={setTrainUploadName}
-                trainUploadFile={trainUploadFile}
-                setTrainUploadFile={setTrainUploadFile}
-                trainUploadSubmitted={trainUploadSubmitted}
-                setTrainUploadSubmitted={setTrainUploadSubmitted}
+                learnSource={learnSource}
+                setLearnSource={setLearnSource}
+                learnUploadName={learnUploadName}
+                setLearnUploadName={setLearnUploadName}
+                learnUploadFile={learnUploadFile}
+                setLearnUploadFile={setLearnUploadFile}
+                learnUploadSubmitted={learnUploadSubmitted}
+                setLearnUploadSubmitted={setLearnUploadSubmitted}
                 pendingUploadedPortfolioName={pendingUploadedPortfolioName}
                 setPendingUploadedPortfolioName={setPendingUploadedPortfolioName}
                 uploadedDatasets={uploadedDatasets}
                 deleteSelectedPortfolio={deleteSelectedPortfolio}
-                trainK={trainK}
-                setTrainK={setTrainK}
-                trainProfiles={trainProfiles}
+                learnK={learnK}
+                setLearnK={setLearnK}
+                learnProfiles={learnProfiles}
                 stopLearnProcess={stopLearnProcess}
                 catalog={catalog}
                 catalogList={catalogList}
@@ -1012,20 +1264,24 @@ export default function Home() {
                 loadCatalog={loadCatalog}
                 expandedProfile={expandedProfile}
                 setExpandedProfile={setExpandedProfile}
-                startExperiment={startExperiment}
-                stopExperiment={stopExperiment}
-                deleteExperiment={deleteExperiment}
+                startOptimization={startOptimization}
+                stopOptimization={stopOptimization}
+                deleteOptimization={deleteOptimization}
                 deleteCatalog={deleteCatalog}
-                experimentState={experimentState}
-                experimentStarting={experimentStarting}
-                showExperimentProgress={showExperimentProgress}
-                savedExperiments={savedExperiments}
-                selectedSavedExperimentId={selectedSavedExperimentId}
-                loadSavedExperiment={loadSavedExperiment}
-                fetchSavedExperiments={fetchSavedExperiments}
+                optimizationState={optimizationState}
+                optimizationStarting={optimizationStarting}
+                optimizeInProgress={optimizeInProgress}
+                optimizationStopPhase={optimizationStopPhase}
+                showOptimizationProgress={showOptimizationProgress}
+                savedOptimizations={savedOptimizations}
+                selectedSavedOptimizationId={selectedSavedOptimizationId}
+                loadSavedOptimization={loadSavedOptimization}
+                fetchSavedOptimizations={fetchSavedOptimizations}
                 incentiveSets={incentiveSets}
                 selectedIncentiveSetVersion={selectedIncentiveSetVersion}
                 setSelectedIncentiveSetVersion={setSelectedIncentiveSetVersion}
+                selectedIncentiveSetDetail={selectedIncentiveSetDetail}
+                incentiveSetDetailLoading={incentiveSetDetailLoading}
               />
             ) : null}
           </div>
@@ -1039,30 +1295,212 @@ export default function Home() {
 // Profile Generator View
 // ========================================================
 function ProfileGeneratorView({
-  genLoading, genError, trainStatus, generatorTab, setGeneratorTab,
-  trainSource, setTrainSource, trainUploadName, setTrainUploadName, trainUploadFile, setTrainUploadFile, trainUploadSubmitted, setTrainUploadSubmitted, pendingUploadedPortfolioName, setPendingUploadedPortfolioName, uploadedDatasets, deleteSelectedPortfolio, trainK, setTrainK, trainProfiles, stopLearnProcess,
+  genLoading, genError, learnStatus, learnInProgress, generatorTab, setGeneratorTab,
+  learnSource, setLearnSource, learnUploadName, setLearnUploadName, learnUploadFile, setLearnUploadFile, learnUploadSubmitted, setLearnUploadSubmitted, pendingUploadedPortfolioName, setPendingUploadedPortfolioName, uploadedDatasets, deleteSelectedPortfolio, learnK, setLearnK, learnProfiles, stopLearnProcess,
   catalog, catalogList, selectedCatalogVersion, setSelectedCatalogVersion, loadCatalog,
   expandedProfile, setExpandedProfile,
-  startExperiment, stopExperiment, deleteExperiment, deleteCatalog,
-  experimentState, experimentStarting, showExperimentProgress,
-  savedExperiments, selectedSavedExperimentId, loadSavedExperiment, fetchSavedExperiments,
-  incentiveSets, selectedIncentiveSetVersion, setSelectedIncentiveSetVersion,
+  startOptimization, stopOptimization, deleteOptimization, deleteCatalog,
+  optimizationState, optimizationStarting, optimizeInProgress, optimizationStopPhase, showOptimizationProgress,
+  savedOptimizations, selectedSavedOptimizationId, loadSavedOptimization, fetchSavedOptimizations,
+  incentiveSets, selectedIncentiveSetVersion, setSelectedIncentiveSetVersion, selectedIncentiveSetDetail, incentiveSetDetailLoading,
 }: any) {
-  const [showAllIncentives, setShowAllIncentives] = useState(false);
+  const [showIncentiveSetIncentives, setShowIncentiveSetIncentives] = useState(false);
+  const [showDecisionSteps, setShowDecisionSteps] = useState(false);
+  const [optimizeInitElapsedSec, setOptimizeInitElapsedSec] = useState(0);
+  const isLearnActive = Boolean(learnInProgress);
+  const isOptimizeActive = Boolean(optimizeInProgress);
+  const showOptimizeStatusMessage = showOptimizationProgress && (isOptimizeActive || optimizationState || optimizationStopPhase !== "idle");
+  const isGeneratorLocked = isLearnActive || isOptimizeActive;
+  const selectedSetMeta = incentiveSets.find((s: any) => s.version === selectedIncentiveSetVersion);
+  const detailMatchesSelection = selectedIncentiveSetDetail
+    && (!selectedIncentiveSetVersion || selectedIncentiveSetDetail.version === selectedIncentiveSetVersion);
+  const incentiveSetTitle = selectedIncentiveSetDetail?.name
+    || selectedSetMeta?.name
+    || selectedIncentiveSetVersion
+    || "Incentive Set";
+  const incentivesForDisplay = detailMatchesSelection
+    ? (selectedIncentiveSetDetail?.incentives || [])
+    : [];
+  useEffect(() => {
+    if (!isOptimizeActive || optimizationState) {
+      setOptimizeInitElapsedSec(0);
+      return;
+    }
+    const startedAt = Date.now();
+    const timer = setInterval(() => {
+      setOptimizeInitElapsedSec(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isOptimizeActive, optimizationState]);
   const onTrainFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.[0]) return;
     const selected = e.target.files[0];
-    setTrainUploadFile(selected);
-    if (!trainUploadName.trim()) {
+    setLearnUploadFile(selected);
+    if (!learnUploadName.trim()) {
       const stripped = selected.name.replace(/\.[^/.]+$/, "");
-      setTrainUploadName(stripped);
+      setLearnUploadName(stripped);
     }
   };
   const tabs: { key: string; label: string }[] = [
-    { key: "train", label: "Learn" },
+    { key: "learn", label: "Learn" },
     { key: "catalog", label: "Catalog" },
-    { key: "experiment", label: "Optimize" },
+    { key: "optimize", label: "Optimize" },
   ];
+  const renderLearnStatus = (status: string) => {
+    const compact = status.replace(/\s+elapsed$/, "").trim();
+    const match = compact.match(/^(.*\s)(\d+%|\d+m \d{2}s|\d+s)$/);
+    if (!match) return <span>{compact}</span>;
+    return (
+      <>
+        <span>{match[1]}</span>
+        <span className="text-slate-400">{match[2]}</span>
+      </>
+    );
+  };
+  const renderOptimizationStatus = (state: any) => {
+    if (!state || state.status !== "running") {
+      return (
+        <>
+          <span>{state?.current_step || state?.status || "Working"} </span>
+          <span className="text-slate-400">{state?.progress ?? 0}%</span>
+        </>
+      );
+    }
+
+    const profileId = String(state.active_profile_id || "").trim();
+    const iter = Number(state.active_profile_iteration || 0);
+    const iterMax = Number(state.max_iterations || 50);
+    const windowSize = Number(state.convergence_window || 6);
+    const patience = Number(state.patience || 3);
+    const stable = Math.max(0, Math.min(Number(state.active_profile_no_improve || 0), patience));
+    const minIterations = Math.min(Math.max(windowSize, patience + 3), iterMax);
+    const match = String(state.current_step || "").match(/\((\d+)\/(\d+)\)/);
+    const profilePos = match ? ` (${match[1]}/${match[2]})` : "";
+
+    const phaseText = iter >= minIterations
+      ? `Convergence check · Window ${windowSize} · Stable ${stable}/${patience}`
+      : `Warm-up for convergence · ${iter}/${minIterations}`;
+
+    return (
+      <>
+        <span>
+          {`Optimizing ${profileId || "profile"}${profilePos} · Iteration ${iter}/${iterMax} · ${phaseText} `}
+        </span>
+        <span className="text-slate-400">{state.progress}%</span>
+      </>
+    );
+  };
+  const formatProgramName = (program: any) => {
+    const stamp = program?.completed_at || program?.started_at;
+    if (!stamp) return "";
+    const when = new Date(stamp).toLocaleString();
+    const status = String(program?.status || "").trim();
+    const count = Number(program?.result_count ?? 0);
+    const countText = Number.isFinite(count) ? `${count} profiles` : "0 profiles";
+    if (!status) return when;
+    return `${when} — ${status} (${countText})`;
+  };
+  const programOptions = useMemo(() => {
+    const base = (savedOptimizations || []).map((exp: any) => ({
+      optimization_id: String(exp.optimization_id || ""),
+      label: formatProgramName(exp),
+    })).filter((exp: any) => Boolean(exp.optimization_id));
+
+    const selectedId = String(selectedSavedOptimizationId || "");
+    if (!selectedId || base.some((exp: any) => exp.optimization_id === selectedId)) {
+      return base;
+    }
+
+    const stateId = String(optimizationState?.optimization_id || "");
+    const hasStateForSelected = stateId && stateId === selectedId;
+    const placeholderLabel = hasStateForSelected
+      ? formatProgramName({
+        started_at: optimizationState?.started_at,
+        completed_at: optimizationState?.completed_at,
+        status: optimizationState?.status,
+        result_count: Array.isArray(optimizationState?.results) ? optimizationState.results.length : 0,
+      })
+      : "";
+
+    return [{ optimization_id: selectedId, label: placeholderLabel }, ...base];
+  }, [savedOptimizations, selectedSavedOptimizationId, optimizationState]);
+  const getStepBadgeClass = (status: "pending" | "running" | "done" | "skipped" | "blocked") => {
+    if (status === "running") return "bg-blue-50 text-blue-700 border-blue-200";
+    if (status === "done") return "bg-emerald-50 text-emerald-700 border-emerald-200";
+    if (status === "skipped") return "bg-slate-50 text-slate-500 border-slate-200";
+    if (status === "blocked") return "bg-amber-50 text-amber-700 border-amber-200";
+    return "bg-slate-50 text-slate-500 border-slate-200";
+  };
+  const renderOptimizationDecisionSteps = (state: any) => {
+    const status = String(state?.status || "");
+    const isRunning = status === "running";
+    const isFinished = status === "completed" || status === "cancelled";
+    const isFailed = status === "failed";
+    const hasAnyData = Boolean(state);
+    const hasPilotData = Array.isArray(state?.available_incentives)
+      && state.available_incentives.some((inc: any) => Number(inc?.uptake_observed_trials || 0) > 0);
+    const steps: { name: string; detail: string; status: "pending" | "running" | "done" | "skipped" | "blocked" }[] = [
+      {
+        name: "1. Start Optimization",
+        detail: hasAnyData ? "Optimization run has started and context is loaded" : "Waiting for you to start optimization",
+        status: hasAnyData ? "done" : "pending",
+      },
+      {
+        name: "2. Evaluate Current Profile",
+        detail: isRunning
+          ? (state?.current_step || "Evaluating profile behavior and baseline value")
+          : (isFinished ? "Per-profile optimization rounds finished" : isFailed ? "Optimization stopped due to an error" : "Waiting to start"),
+        status: isRunning ? "running" : (isFinished ? "done" : isFailed ? "blocked" : "pending"),
+      },
+      {
+        name: "3. Apply Uptake Assumptions",
+        detail: isRunning
+          ? "Queued after profile evaluation in each iteration"
+          : (hasPilotData ? "Using pilot-updated priors" : "Using default priors from redemption rates"),
+        status: isRunning ? "pending" : (hasAnyData ? "done" : "pending"),
+      },
+      {
+        name: "4. Update Confidence (Bayesian)",
+        detail: isRunning
+          ? "Queued after uptake assumptions are applied"
+          : (hasPilotData ? "Posterior updated with observed trials/successes" : "No pilot observations yet; posterior equals prior"),
+        status: isRunning ? "pending" : (hasAnyData ? "done" : "pending"),
+      },
+      {
+        name: "5. Apply Conservative Screening",
+        detail: isRunning
+          ? "Queued after confidence update"
+          : "Lower-confidence uptake bound applied before incentive acceptance",
+        status: isRunning ? "pending" : (hasAnyData ? "done" : "pending"),
+      },
+      {
+        name: "6. Guardrails",
+        detail: "Budget caps / exposure caps / kill-switch not configured",
+        status: "skipped",
+      },
+      {
+        name: "7. Finalize Selection",
+        detail: isFinished ? "Final incentives selected and results persisted" : "Awaiting optimization completion",
+        status: isFinished ? "done" : "pending",
+      },
+    ];
+    if (!showDecisionSteps) return null;
+    return (
+      <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
+        {steps.map((step) => (
+          <div key={step.name} className="rounded-md border border-slate-200 bg-white px-3 py-2">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-medium text-slate-800">{step.name}</span>
+              <span className={cn("text-[11px] font-semibold uppercase tracking-wider rounded border px-2 py-0.5", getStepBadgeClass(step.status))}>
+                {step.status}
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-slate-500">{step.detail}</p>
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -1079,8 +1517,9 @@ function ProfileGeneratorView({
             <button
               key={t.key}
               onClick={() => setGeneratorTab(t.key)}
+              disabled={isGeneratorLocked}
               className={cn(
-                "px-5 py-3 text-sm border-b-2 -mb-px transition-colors whitespace-nowrap",
+                "px-5 py-3 text-sm border-b-2 -mb-px transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed",
                 generatorTab === t.key
                   ? "border-black text-black font-bold"
                   : "font-medium border-transparent text-slate-500 hover:text-slate-700"
@@ -1092,8 +1531,8 @@ function ProfileGeneratorView({
         </div>
 
         <div className="p-6">
-          {/* Training Panel */}
-          {generatorTab === "train" && (
+          {/* Learn Panel */}
+          {generatorTab === "learn" && (
             <div className="space-y-6">
               <div>
                 <h3 className="text-lg font-semibold text-slate-900 mb-1">Learn Profiles</h3>
@@ -1105,16 +1544,17 @@ function ProfileGeneratorView({
                   <label className="block text-sm font-medium text-slate-700 mb-2">Portfolio</label>
                   <div className="flex items-center gap-2">
                     <select
-                      value={trainSource}
+                      value={learnSource}
+                      disabled={isGeneratorLocked}
                       onChange={(e) => {
                         const next = e.target.value;
-                        setTrainSource(next);
+                        setLearnSource(next);
                         if (next !== "uploaded-pending") {
                           setPendingUploadedPortfolioName("");
                         }
                         if (next === "uploaded") {
-                          setTrainUploadSubmitted(false);
-                          setTrainUploadName("");
+                          setLearnUploadSubmitted(false);
+                          setLearnUploadName("");
                         }
                       }}
                       className="rounded-md border px-3 py-2 text-sm bg-white w-full"
@@ -1131,9 +1571,10 @@ function ProfileGeneratorView({
                       )}
                       <option value="uploaded">Upload new portfolio</option>
                     </select>
-                    {trainSource.startsWith("uploaded-dataset:") && (
+                    {learnSource.startsWith("uploaded-dataset:") && (
                       <button
                         onClick={deleteSelectedPortfolio}
+                        disabled={isGeneratorLocked}
                         className="rounded-md border border-red-200 p-2 text-red-500 hover:bg-red-50 hover:text-red-600 transition-colors"
                         title="Delete selected portfolio and associated data"
                       >
@@ -1144,16 +1585,23 @@ function ProfileGeneratorView({
 
                   <div className="mt-4">
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Number of Profiles (K): <span className="font-bold text-black">{trainK}</span>
+                      Number of Profiles (K): <span className="font-bold text-black">{learnK}</span>
                     </label>
                     <input
                       type="range"
                       min={3}
                       max={15}
-                      value={trainK}
-                      onChange={(e) => setTrainK(parseInt(e.target.value))}
+                      list="learn-k-ticks"
+                      value={learnK}
+                      disabled={isGeneratorLocked}
+                      onChange={(e) => setLearnK(parseInt(e.target.value))}
                       className="w-full accent-black"
                     />
+                    <datalist id="learn-k-ticks">
+                      {Array.from({ length: 13 }, (_, i) => i + 3).map((k) => (
+                        <option key={k} value={k} />
+                      ))}
+                    </datalist>
                     <div className="flex justify-between text-xs text-slate-400 mt-1">
                       <span>3</span>
                       <span>15</span>
@@ -1162,14 +1610,15 @@ function ProfileGeneratorView({
                 </div>
 
                 <div className="space-y-4">
-                  {trainSource === "uploaded" && !trainUploadSubmitted && (
+                  {learnSource === "uploaded" && !learnUploadSubmitted && (
                     <>
                       <div>
                         <label className="block text-sm font-medium text-slate-700 mb-2">Portfolio Name</label>
                         <input
                           type="text"
-                          value={trainUploadName}
-                          onChange={(e) => setTrainUploadName(e.target.value)}
+                          value={learnUploadName}
+                          disabled={isGeneratorLocked}
+                          onChange={(e) => setLearnUploadName(e.target.value)}
                           className="rounded-md border px-3 py-2 text-sm bg-white w-full"
                           placeholder="e.g., Q1 2026 Retail Transactions"
                         />
@@ -1186,11 +1635,12 @@ function ProfileGeneratorView({
                             type="file"
                             accept=".csv,text/csv"
                             className="hidden"
+                            disabled={isGeneratorLocked}
                             onChange={onTrainFileChange}
                           />
                         </label>
-                        {trainUploadFile && (
-                          <p className="mt-2 text-xs text-slate-500 truncate">{trainUploadFile.name}</p>
+                        {learnUploadFile && (
+                          <p className="mt-2 text-xs text-slate-500 truncate">{learnUploadFile.name}</p>
                         )}
                       </div>
                     </>
@@ -1200,20 +1650,21 @@ function ProfileGeneratorView({
 
               <div className="flex items-center gap-4">
                 <button
-                  onClick={genLoading ? stopLearnProcess : trainProfiles}
+                  onClick={isLearnActive ? stopLearnProcess : learnProfiles}
+                  disabled={!isLearnActive && isOptimizeActive}
                   aria-label="Submit"
-                  title={genLoading ? "Stop" : "Submit"}
+                  title={isLearnActive ? "Stop" : "Submit"}
                   className="rounded-full bg-black w-8 h-8 text-white hover:opacity-80 disabled:opacity-50 flex items-center justify-center"
                 >
-                  {genLoading
+                  {isLearnActive
                     ? <Square className="h-3.5 w-3.5" />
                     : <ArrowUp className="h-4 w-4" strokeWidth={2.25} />
                   }
                 </button>
-                {genLoading && (
+                {isLearnActive && (
                   <span className="text-sm text-slate-600 flex items-center gap-2">
-                    <img src="/linex-animated.svg" alt="Linex" className="h-5 w-5" />
-                    <span>{trainStatus || "Working..."}</span>
+                    <img src="/linex-animated.svg" alt="Linex" className="h-5 w-5 shrink-0" />
+                    <span>{renderLearnStatus(learnStatus || "Working...")}</span>
                   </span>
                 )}
               </div>
@@ -1232,6 +1683,7 @@ function ProfileGeneratorView({
                   <div className="flex items-center gap-2">
                     <select
                       value={selectedCatalogVersion}
+                      disabled={isGeneratorLocked}
                       onChange={(e) => { setSelectedCatalogVersion(e.target.value); loadCatalog(e.target.value); }}
                       className="rounded-md border px-3 py-2 text-sm bg-white"
                     >
@@ -1243,6 +1695,7 @@ function ProfileGeneratorView({
                     </select>
                     <button
                       onClick={() => selectedCatalogVersion && deleteCatalog(selectedCatalogVersion)}
+                      disabled={isGeneratorLocked}
                       className="rounded-md border border-red-200 p-2 text-red-500 hover:bg-red-50 hover:text-red-600 transition-colors"
                       title="Delete this catalog"
                     >
@@ -1256,7 +1709,7 @@ function ProfileGeneratorView({
                 <div className="space-y-2">
                   <div className="text-xs text-slate-400 mb-3">
                     Version: <span className="font-mono">{catalog.version}</span> · Source: {catalog.source} · K={catalog.k}
-                    {catalog.total_training_population > 0 && ` · ${catalog.total_training_population.toLocaleString()} users`}
+                    {catalog.total_learning_population > 0 && ` · ${catalog.total_learning_population.toLocaleString()} users`}
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
@@ -1404,23 +1857,24 @@ function ProfileGeneratorView({
                 </div>
               ) : (
                 <div className="text-sm text-slate-500 py-8 text-center">
-                  No catalog loaded. Train profiles first or select a saved catalog.
+                  No catalog loaded. Learn profiles first or select a saved catalog.
                 </div>
               )}
             </div>
           )}
 
           {/* Optimize Panel */}
-          {generatorTab === "experiment" && (
+          {generatorTab === "optimize" && (
             <div className="space-y-6">
               <h3 className="text-lg font-semibold text-slate-900">Portfolio Optimization</h3>
               {catalogList.length > 0 && (
                 <div className="flex items-center gap-2">
-                  <label className="text-sm text-slate-500 shrink-0">Select profile:</label>
+                  <label className="text-sm text-slate-500 shrink-0 w-20 text-left">Profile</label>
                   <select
                     value={selectedCatalogVersion}
-                    onChange={(e) => { setSelectedCatalogVersion(e.target.value); loadCatalog(e.target.value); fetchSavedExperiments(e.target.value); }}
-                    className="rounded-md border px-3 py-2 text-sm bg-white"
+                    disabled={isGeneratorLocked}
+                    onChange={(e) => { setSelectedCatalogVersion(e.target.value); fetchSavedOptimizations(e.target.value); }}
+                    className="rounded-md border px-3 py-2 text-sm bg-white w-full max-w-[640px]"
                   >
                     {catalogList.map((c: any) => (
                       <option key={c.version} value={c.version}>
@@ -1430,6 +1884,7 @@ function ProfileGeneratorView({
                   </select>
                   <button
                     onClick={() => selectedCatalogVersion && deleteCatalog(selectedCatalogVersion)}
+                    disabled={isGeneratorLocked}
                     className="rounded-md border border-red-200 p-2 text-red-500 hover:bg-red-50 hover:text-red-600 transition-colors"
                     title="Delete this catalog"
                   >
@@ -1440,11 +1895,12 @@ function ProfileGeneratorView({
 
               {incentiveSets.length > 0 && (
                 <div className="flex items-center gap-2">
-                  <label className="text-sm text-slate-500 shrink-0">Incentive set:</label>
+                  <label className="text-sm text-slate-500 shrink-0 w-20 text-left">Incentile</label>
                   <select
                     value={selectedIncentiveSetVersion}
+                    disabled={isGeneratorLocked}
                     onChange={(e) => setSelectedIncentiveSetVersion(e.target.value)}
-                    className="rounded-md border px-3 py-2 text-sm bg-white"
+                    className="rounded-md border px-3 py-2 text-sm bg-white w-full max-w-[640px]"
                   >
                     {incentiveSets.map((s: any) => (
                       <option key={s.version} value={s.version}>
@@ -1452,20 +1908,87 @@ function ProfileGeneratorView({
                       </option>
                     ))}
                   </select>
+                  <button
+                    type="button"
+                    onClick={() => setShowIncentiveSetIncentives(!showIncentiveSetIncentives)}
+                    className="px-1 text-xs text-slate-500 hover:text-slate-700 hover:underline underline-offset-2"
+                  >
+                    {showIncentiveSetIncentives ? "Hide" : "Show"}
+                  </button>
                 </div>
               )}
 
-              {!catalog ? (
-                <div className="text-sm text-slate-500 py-8 text-center">
-                  No catalog loaded. Train profiles first or select a saved catalog.
+              {showIncentiveSetIncentives && (
+                <div className="rounded-lg border border-slate-200 bg-white">
+                  <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      {incentiveSetTitle} ({incentivesForDisplay.length})
+                    </span>
+                    {incentiveSetDetailLoading && (
+                      <span className="text-xs text-slate-400">Loading...</span>
+                    )}
+                  </div>
+                  <div className="px-4 py-3">
+                    {incentivesForDisplay.length === 0 ? (
+                      <p className="text-xs text-slate-500">No incentives loaded for this set.</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5">
+                        {incentivesForDisplay.map((inc: any, idx: number) => (
+                          <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white border border-slate-200 text-[11px] text-slate-500 font-medium">
+                            {inc.name}
+                            <span className="text-slate-300">
+                              ${Math.round((inc.estimated_annual_cost_per_user || 0) * (inc.redemption_rate || 1))}
+                            </span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              ) : (
-                <div className="space-y-6 border-t border-slate-200 pt-6">
+              )}
+
+              {(programOptions.length > 0 || selectedSavedOptimizationId) && (
+                <div className="flex items-center gap-3">
+                  <label className="text-sm text-slate-500 shrink-0 w-20 text-left">Program</label>
+                  <select
+                    value={selectedSavedOptimizationId || ""}
+                    disabled={isGeneratorLocked}
+                    onChange={(e) => {
+                      if (e.target.value) loadSavedOptimization(e.target.value);
+                    }}
+                    className="rounded-md border px-3 py-2 text-sm bg-white w-full max-w-[640px]"
+                  >
+                    {programOptions.map((program: any) => (
+                      <option key={program.optimization_id} value={program.optimization_id}>
+                        {program.label}
+                      </option>
+                    ))}
+                  </select>
+                  {(optimizationState?.status === "completed" || optimizationState?.status === "cancelled") && (
+                    <button
+                      onClick={deleteOptimization}
+                      disabled={isGeneratorLocked}
+                      className="rounded-md border border-red-200 bg-white p-2 text-red-600 hover:bg-red-50"
+                      title="Delete program"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              )}
+
+              <div className="space-y-6 border-t border-slate-200 pt-6">
+
+                  {!selectedCatalogVersion && (
+                    <div className="text-sm text-slate-500">
+                      No profile catalog selected yet.
+                    </div>
+                  )}
 
                   <div className="flex items-center gap-3">
-                    {(experimentState?.status === "running" || experimentStarting) ? (
+                    {isOptimizeActive ? (
                       <button
-                        onClick={stopExperiment}
+                        onClick={stopOptimization}
                         aria-label="Stop"
                         title="Stop"
                         className="rounded-full bg-black w-8 h-8 text-white hover:opacity-80 flex items-center justify-center"
@@ -1474,8 +1997,8 @@ function ProfileGeneratorView({
                       </button>
                     ) : (
                       <button
-                        onClick={startExperiment}
-                        disabled={genLoading}
+                        onClick={startOptimization}
+                        disabled={genLoading || isLearnActive || !selectedCatalogVersion}
                         aria-label="Submit"
                         title="Submit"
                         className="rounded-full bg-black w-8 h-8 text-white hover:opacity-80 disabled:opacity-50 flex items-center justify-center"
@@ -1486,82 +2009,59 @@ function ProfileGeneratorView({
                         }
                       </button>
                     )}
-                    {experimentState && showExperimentProgress && (
-                      <div className="min-w-0 flex-1 max-w-[520px]">
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <span className={cn(
-                            "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider shrink-0",
-                            experimentState.status === "running" ? "bg-blue-100 text-blue-700" :
-                              experimentState.status === "completed" ? "bg-green-100 text-green-700" :
-                                experimentState.status === "cancelled" ? "bg-amber-100 text-amber-700" :
-                                  "bg-red-100 text-red-700"
-                          )}>
-                            {experimentState.status}
-                          </span>
-                          <div className="text-xs font-mono text-slate-500 shrink-0">{experimentState.progress}%</div>
-                        </div>
-                        <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                          <div
-                            className={cn(
-                              "h-full rounded-full transition-all duration-500",
-                              experimentState.status === "failed"
-                                ? "bg-red-500"
-                                : experimentState.status === "cancelled"
-                                  ? "bg-amber-500"
-                                  : "bg-blue-600"
-                            )}
-                            style={{ width: `${experimentState.progress}%` }}
-                          />
-                        </div>
-                        <div className="text-xs text-slate-600 mt-1 truncate">
-                          {experimentState.current_step}
+                    {showOptimizeStatusMessage && (
+                      <button
+                        type="button"
+                        onClick={() => setShowDecisionSteps(!showDecisionSteps)}
+                        className="px-1 text-xs text-slate-500 hover:text-slate-700 hover:underline underline-offset-2 shrink-0"
+                      >
+                        {showDecisionSteps ? "Hide" : "Detail"}
+                      </button>
+                    )}
+                    {showOptimizeStatusMessage && (
+                      <div className="min-w-0 flex-1 max-w-[520px] flex items-center gap-2">
+                        <img src="/linex-animated.svg" alt="Linex" className="h-5 w-5 shrink-0" />
+                        <div className="min-w-0 text-sm text-slate-700 truncate">
+                          {optimizationStopPhase === "cancelling" ? (
+                            <span>Cancelling optimization...</span>
+                          ) : optimizationStopPhase === "cleaning" ? (
+                            <span>Cleaning up optimization...</span>
+                          ) : optimizationState ? (
+                            renderOptimizationStatus(optimizationState)
+                          ) : (
+                            <>
+                              <span>Initializing optimization... </span>
+                              <span className="text-slate-400">
+                                {optimizeInitElapsedSec < 60
+                                  ? `${optimizeInitElapsedSec}s`
+                                  : `${Math.floor(optimizeInitElapsedSec / 60)}m ${String(optimizeInitElapsedSec % 60).padStart(2, "0")}s`}
+                              </span>
+                            </>
+                          )}
                         </div>
                       </div>
                     )}
                   </div>
 
-                  {savedExperiments.length > 1 && (
-                    <div className="flex items-center gap-3">
-                      <label className="text-xs font-medium text-slate-500 uppercase tracking-wider shrink-0">Saved Runs</label>
-                      <select
-                        value={selectedSavedExperimentId || ""}
-                        onChange={(e) => {
-                          if (e.target.value) loadSavedExperiment(e.target.value);
-                        }}
-                        className="rounded-md border px-3 py-1.5 text-sm bg-white flex-1"
-                      >
-                        {savedExperiments.map((exp: any) => (
-                          <option key={exp.experiment_id} value={exp.experiment_id}>
-                            {new Date(exp.completed_at || exp.started_at).toLocaleString()} — {exp.status} ({exp.result_count} profiles)
-                          </option>
-                        ))}
-                      </select>
+                  {(optimizationState || showOptimizationProgress || isOptimizeActive) && (
+                    <div>
+                      {renderOptimizationDecisionSteps(optimizationState)}
                     </div>
                   )}
 
-                  {experimentState && (
-                    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm space-y-6">
-                      {experimentState.status === "failed" && (
-                        <div className="rounded-md bg-red-50 p-4 text-red-700 text-sm">
-                          Error: {experimentState.error}
-                        </div>
-                      )}
+                  {optimizationState?.status === "failed" && (
+                    <div className="rounded-md bg-red-50 p-4 text-red-700 text-sm">
+                      Error: {optimizationState.error}
+                    </div>
+                  )}
 
-                      {experimentState.results && experimentState.results.length > 0 && (
-                        <div className="mt-8 space-y-6">
+                  {optimizationState?.results && optimizationState.results.length > 0 && (
+                    <div className="rounded-xl border border-slate-200 bg-white px-6 pb-6 pt-3 shadow-sm space-y-6">
+                      <div className="space-y-6">
                           {/* Results table — most important, shown first */}
                           <div>
                             <div className="flex items-center justify-between mb-4">
-                              <h4 className="font-semibold text-slate-900">Optimal Incentive Programs</h4>
-                              {(experimentState.status === "completed" || experimentState.status === "cancelled") && (
-                                <button
-                                  onClick={deleteExperiment}
-                                  className="rounded-md border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 flex items-center gap-1.5"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                  Delete
-                                </button>
-                              )}
+                              <h4 className="mt-0 font-semibold text-slate-900">Optimal Incentive Program</h4>
                             </div>
                             <div className="overflow-x-auto">
                               <table className="w-full text-sm">
@@ -1577,7 +2077,7 @@ function ProfileGeneratorView({
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {experimentState.results.map((r: any) => (
+                                  {optimizationState.results.map((r: any) => (
                                     <tr key={r.profile_id} className="border-b border-slate-100">
                                       <td className="py-3 pr-4 font-semibold text-slate-900">{r.profile_id}</td>
                                       <td className="py-3 pr-4 text-slate-700">
@@ -1612,31 +2112,31 @@ function ProfileGeneratorView({
                                     </td>
                                     <td className="py-4 pr-4 text-right font-mono text-slate-900 font-bold border-t border-slate-200">
                                       {(() => {
-                                        const totalOrig = experimentState.results.reduce((sum: number, r: any) => sum + (r.original_portfolio_ltv || 0), 0);
+                                        const totalOrig = optimizationState.results.reduce((sum: number, r: any) => sum + (r.original_portfolio_ltv || 0), 0);
                                         return `$${Math.round(totalOrig).toLocaleString('en-US')}`;
                                       })()}
                                     </td>
                                     <td className="py-4 pr-4 text-right font-mono text-slate-700 border-t border-slate-200">
                                       {(() => {
-                                        const totalGross = experimentState.results.reduce((sum: number, r: any) => sum + (r.new_gross_portfolio_ltv || 0), 0);
+                                        const totalGross = optimizationState.results.reduce((sum: number, r: any) => sum + (r.new_gross_portfolio_ltv || 0), 0);
                                         return `$${Math.round(totalGross).toLocaleString('en-US')}`;
                                       })()}
                                     </td>
                                     <td className="py-4 pr-4 text-right font-mono text-slate-700 border-t border-slate-200">
                                       {(() => {
-                                        const totalCost = experimentState.results.reduce((sum: number, r: any) => sum + (r.portfolio_cost || 0), 0);
+                                        const totalCost = optimizationState.results.reduce((sum: number, r: any) => sum + (r.portfolio_cost || 0), 0);
                                         return `-$${Math.round(totalCost).toLocaleString('en-US')}`;
                                       })()}
                                     </td>
                                     <td className="py-4 pr-4 text-right font-mono text-slate-700 font-bold border-t border-slate-200">
                                       {(() => {
-                                        const totalLift = experimentState.results.reduce((sum: number, r: any) => sum + (r.lift || 0), 0);
+                                        const totalLift = optimizationState.results.reduce((sum: number, r: any) => sum + (r.lift || 0), 0);
                                         return `+$${Math.round(totalLift).toLocaleString('en-US')}`;
                                       })()}
                                     </td>
                                     <td className="py-4 pr-4 text-right font-mono text-slate-900 font-bold border-t border-slate-200">
                                       {(() => {
-                                        const totalNet = experimentState.results.reduce((sum: number, r: any) => sum + (r.new_net_portfolio_ltv || 0), 0);
+                                        const totalNet = optimizationState.results.reduce((sum: number, r: any) => sum + (r.new_net_portfolio_ltv || 0), 0);
                                         return `$${Math.round(totalNet).toLocaleString('en-US')}`;
                                       })()}
                                     </td>
@@ -1648,53 +2148,12 @@ function ProfileGeneratorView({
 
                           {/* Methodology note — compact */}
                           <div className="text-xs text-slate-400 px-1">
-                            Convergence-based optimization: each profile iterated until no improvement for {experimentState.iterations_per_profile} consecutive rounds. Only net-positive incentives retained (marginal LTV &gt; effective cost).
+                            Convergence-based optimization: each profile iterates until rolling outcomes statistically stabilize (low variance + near-zero trend), with max-iteration and patience guards. Only net-positive incentives retained (marginal LTV &gt; effective cost).
                           </div>
-
-                          {/* Available Incentives — collapsed by default, at the bottom */}
-                          {(() => {
-                            const allIncentives = experimentState.available_incentives || [];
-                            const PREVIEW_COUNT = 5;
-                            const visibleIncentives = showAllIncentives ? allIncentives : allIncentives.slice(0, PREVIEW_COUNT);
-                            const hiddenCount = allIncentives.length - PREVIEW_COUNT;
-                            return (
-                              <div className="rounded-lg border border-slate-200 bg-slate-50/50">
-                                <button
-                                  onClick={() => setShowAllIncentives(!showAllIncentives)}
-                                  className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-slate-100/50 transition-colors rounded-lg"
-                                >
-                                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                                    Available Incentives ({allIncentives.length})
-                                  </span>
-                                  <ChevronDown className={cn("h-4 w-4 text-slate-400 transition-transform", showAllIncentives && "rotate-180")} />
-                                </button>
-                                <div className="px-4 pb-3">
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {visibleIncentives.map((inc: any, idx: number) => (
-                                      <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white border border-slate-200 text-[11px] text-slate-500 font-medium">
-                                        {inc.name}
-                                        <span className="text-slate-300">${Math.round(inc.estimated_annual_cost_per_user * (inc.redemption_rate || 1))}</span>
-                                      </span>
-                                    ))}
-                                    {!showAllIncentives && hiddenCount > 0 && (
-                                      <span
-                                        onClick={() => setShowAllIncentives(true)}
-                                        className="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 text-[11px] text-slate-400 font-medium cursor-pointer hover:bg-slate-200 transition-colors"
-                                      >
-                                        +{hiddenCount} more
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })()}
-                        </div>
-                      )}
+                      </div>
                     </div>
                   )}
                 </div>
-              )}
             </div>
           )}
         </div>

@@ -6,6 +6,7 @@ import csv
 import io
 import re
 from datetime import datetime
+from typing import Iterable
 
 from config import EXCLUDED_STOCK_CODES, MAX_REASONABLE_QUANTITY
 from models.transaction import Transaction, UserTransactions
@@ -181,11 +182,7 @@ def _clean_numeric(value: object) -> object:
     return txt
 
 
-def parse_training_records(records: list[dict], default_customer_id: str = "") -> dict[str, UserTransactions]:
-    """Parse uploaded training rows with flexible column naming into users map."""
-    if not records:
-        return {}
-
+def _build_portfolio_alias_lookup() -> dict[str, str]:
     field_aliases: dict[str, list[str]] = {
         "customer_id": ["customer_id", "customer id", "user_id", "user id", "userid", "client_id", "account_id", "member_id", "id"],
         "date": ["date", "transaction_date", "transaction date", "invoice_date", "invoice date", "posted_date", "posted date", "timestamp", "datetime"],
@@ -205,11 +202,24 @@ def parse_training_records(records: list[dict], default_customer_id: str = "") -
     for canonical, aliases in field_aliases.items():
         for alias in aliases:
             alias_lookup[_normalize_key(alias)] = canonical
+    return alias_lookup
 
+
+def parse_portfolio_records_with_metadata(
+    records: Iterable[dict],
+    default_customer_id: str = "",
+) -> tuple[dict[str, UserTransactions], int, list[str]]:
+    """Parse uploaded portfolio rows from any iterable and return users + metadata."""
+    alias_lookup = _build_portfolio_alias_lookup()
     grouped: dict[str, list[dict]] = {}
+    row_count = 0
+    field_names: set[str] = set()
     for row in records:
         if not isinstance(row, dict):
             continue
+        row_count += 1
+        for key in row.keys():
+            field_names.add(str(key))
         normalized_row: dict[str, object] = {}
         for raw_key, raw_value in row.items():
             canonical = alias_lookup.get(_normalize_key(raw_key))
@@ -251,6 +261,14 @@ def parse_training_records(records: list[dict], default_customer_id: str = "") -
         parsed = parse_json_transactions(txns, customer_id=cid)
         if parsed.transactions:
             users[cid] = parsed
+    return users, row_count, sorted(field_names)
+
+
+def parse_portfolio_records(records: list[dict], default_customer_id: str = "") -> dict[str, UserTransactions]:
+    """Parse uploaded portfolio rows with flexible column naming into users map."""
+    if not records:
+        return {}
+    users, _, _ = parse_portfolio_records_with_metadata(records, default_customer_id=default_customer_id)
     return users
 
 

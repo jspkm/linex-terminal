@@ -22,6 +22,8 @@ CARDS_PATH = PROJECT_ROOT / "cards" / "cards.json"
 
 # Firebase
 FIREBASE_CREDENTIALS_PATH = os.environ.get("FIREBASE_CREDENTIALS_PATH", "linexonewhitelabeler-firebase-adminsdk-fbsvc-3b7f1d399f.json")
+FIREBASE_PROJECT_ID = os.environ.get("GCLOUD_PROJECT", "linexonewhitelabeler")
+FIREBASE_STORAGE_BUCKET = os.environ.get("FIREBASE_STORAGE_BUCKET", "linexonewhitelabeler-portfolio-uploads")
 
 # Preprocessing
 EXCLUDED_STOCK_CODES = frozenset({

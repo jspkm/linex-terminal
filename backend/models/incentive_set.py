@@ -12,6 +12,12 @@ class Incentive(BaseModel):
     name: str
     estimated_annual_cost_per_user: float
     redemption_rate: float
+    # Cold-start certainty modeling:
+    # - prior_strength controls how strongly redemption_rate is treated as prior belief.
+    # - observed_* can be updated from pilots as real data arrives.
+    uptake_prior_strength: float = 20.0
+    uptake_observed_successes: int = 0
+    uptake_observed_trials: int = 0
 
 
 class IncentiveSet(BaseModel):

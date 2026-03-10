@@ -18,7 +18,7 @@ from profile_generator.feature_derivation import (
     FEATURE_NAMES, CORE_AXES, CORE_FEATURE_NAMES, AUXILIARY_FEATURE_NAMES,
 )
 from profile_generator.feature_transform import detect_and_transform, normalize, fit_transform
-from profile_generator.trainer import train_profiles
+from profile_generator.trainer import learn_profiles
 from profile_generator.assigner import assign_profile
 
 
@@ -122,7 +122,7 @@ class TestFeatureTransform:
 # ---- Trainer ----
 
 class TestTrainer:
-    def test_train_basic(self):
+    def test_learn_basic(self):
         # Create 3 distinct clusters — columns must include core feature names
         np.random.seed(42)
         cols = list(CORE_FEATURE_NAMES) + ["aux_0"]
@@ -133,7 +133,7 @@ class TestTrainer:
                 rows.append(row)
         df = pd.DataFrame(rows, index=[f"u{i}" for i in range(90)])
 
-        catalog = train_profiles(df, k=3, source="test")
+        catalog = learn_profiles(df, k=3, source="test")
         assert catalog.k == 3
         assert len(catalog.profiles) == 3
         assert catalog.version.startswith("v_")
@@ -155,7 +155,7 @@ class TestTrainer:
                 [0, 30, 60],
             )
         df = derive_batch_features(users)
-        catalog = train_profiles(df, k=2, source="test")
+        catalog = learn_profiles(df, k=2, source="test")
         # P0 should have higher total_spend centroid than P1
         assert catalog.profiles[0].centroid.get("total_spend", 0) >= catalog.profiles[1].centroid.get("total_spend", 0)
 
@@ -173,7 +173,7 @@ class TestAssigner:
             for _ in range(30):
                 rows.append({c: base + np.random.normal(0, 1) for c in cols})
         df = pd.DataFrame(rows, index=[f"u{i}" for i in range(60)])
-        catalog = train_profiles(df, k=2, source="test")
+        catalog = learn_profiles(df, k=2, source="test")
 
         # Create a user that clearly belongs to one cluster
         high_txns = _make_txns([200] * 20, list(range(20)), cid="test_high")
@@ -219,7 +219,7 @@ class TestBehavioralAxes:
             for i in range(40)
         }
         df = derive_batch_features(users)
-        catalog = train_profiles(df, k=3, source="test")
+        catalog = learn_profiles(df, k=3, source="test")
         assert set(catalog.core_feature_names) == set(CORE_FEATURE_NAMES)
 
     def test_centroids_contain_all_features(self):
@@ -231,7 +231,7 @@ class TestBehavioralAxes:
             for i in range(40)
         }
         df = derive_batch_features(users)
-        catalog = train_profiles(df, k=3, source="test")
+        catalog = learn_profiles(df, k=3, source="test")
         for p in catalog.profiles:
             for feat in FEATURE_NAMES:
                 assert feat in p.centroid, f"Profile {p.profile_id} missing {feat}"

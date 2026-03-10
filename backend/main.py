@@ -7,12 +7,22 @@ Heavy imports are deferred to minimize cold-start latency.
 import json
 import os
 import random
+import traceback
+import re
+import datetime
 
 from firebase_functions import https_fn, options
-from firebase_admin import initialize_app, credentials, get_app
+from firebase_admin import initialize_app, credentials, get_app, storage
 import firebase_admin
 
-from config import CARDS_PATH, FIREBASE_CREDENTIALS_PATH, GEMINI_API_KEY, MODEL, TEST_USERS_DIR
+from config import (
+    CARDS_PATH,
+    FIREBASE_CREDENTIALS_PATH,
+    FIREBASE_STORAGE_BUCKET,
+    GEMINI_API_KEY,
+    MODEL,
+    TEST_USERS_DIR,
+)
 
 # Initialize Firebase Admin SDK (lightweight — no Firestore queries)
 try:
@@ -21,9 +31,9 @@ except ValueError:
     try:
         if FIREBASE_CREDENTIALS_PATH and os.path.exists(FIREBASE_CREDENTIALS_PATH):
             cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
-            initialize_app(cred)
+            initialize_app(cred, {"storageBucket": FIREBASE_STORAGE_BUCKET})
         else:
-            initialize_app()  # Uses Application Default Credentials (Cloud Run)
+            initialize_app(options={"storageBucket": FIREBASE_STORAGE_BUCKET})  # Uses ADC (Cloud Run)
     except ValueError:
         # Another concurrent init won the race; existing default app is fine.
         pass
@@ -72,6 +82,11 @@ def _extract_path_param(req, endpoint_name):
     return None
 
 
+def _safe_file_name(name: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", name or "portfolio.csv").strip("._")
+    return cleaned or "portfolio.csv"
+
+
 # ==================== Original endpoints ====================
 
 
@@ -106,7 +121,9 @@ def analyze_transactions(req: https_fn.Request) -> https_fn.Response:
             "card_recommendations": card_rec.model_dump(),
         })
     except Exception as e:
-        return _json_response({"error": str(e)}, 500)
+        print("learn_profiles exception:")
+        print(traceback.format_exc())
+        return _json_response({"error": f"{type(e).__name__}: {e}"}, 500)
 
 
 @https_fn.on_request(cors=_CORS_ALL, timeout_sec=120)
@@ -277,14 +294,65 @@ def list_profile_catalogs(req: https_fn.Request) -> https_fn.Response:
 
 
 @https_fn.on_request(cors=_CORS_ALL)
-def list_uploaded_training_datasets(req: https_fn.Request) -> https_fn.Response:
-    """List uploaded training datasets from Firestore."""
+def list_portfolio_datasets(req: https_fn.Request) -> https_fn.Response:
+    """List uploaded portfolio datasets from Firestore."""
     if req.method == "OPTIONS":
         return https_fn.Response(status=204)
     try:
-        from profile_generator.firestore_client import fs_list_uploaded_training_datasets
-        datasets = fs_list_uploaded_training_datasets()
+        from profile_generator.firestore_client import fs_list_portfolio_datasets
+        datasets = fs_list_portfolio_datasets()
         return _json_response({"datasets": datasets})
+    except Exception as e:
+        return _json_response({"error": str(e)}, 500)
+
+
+@https_fn.on_request(cors=_CORS_ALL)
+def create_portfolio_upload_url(req: https_fn.Request) -> https_fn.Response:
+    """Create a signed Cloud Storage upload URL and dataset metadata doc."""
+    if req.method == "OPTIONS":
+        return https_fn.Response(status=204)
+    try:
+        from profile_generator.firestore_client import fs_create_portfolio_dataset_metadata
+
+        data = req.get_json(silent=True) or {}
+        upload_name = str(data.get("upload_name", "")).strip()
+        file_name = _safe_file_name(str(data.get("file_name", "portfolio.csv")))
+        content_type = str(data.get("content_type", "text/csv") or "text/csv")
+        size_bytes = int(data.get("size_bytes", 0) or 0)
+        if not upload_name:
+            return _json_response({"error": "Missing upload_name"}, 400)
+        if size_bytes <= 0:
+            return _json_response({"error": "Missing or invalid size_bytes"}, 400)
+
+        dataset_id, bucket_name, object_path = fs_create_portfolio_dataset_metadata(
+            upload_name=upload_name,
+            file_name=file_name,
+            content_type=content_type,
+            size_bytes=size_bytes,
+        )
+
+        request_origin = (
+            req.headers.get("origin")
+            or req.headers.get("Origin")
+            or ""
+        ).strip()
+        upload_origin = request_origin if request_origin else None
+
+        bucket = storage.bucket(bucket_name)
+        blob = bucket.blob(object_path)
+        upload_url = blob.create_resumable_upload_session(
+            content_type=content_type,
+            size=size_bytes,
+            origin=upload_origin,
+        )
+
+        return _json_response({
+            "dataset_id": dataset_id,
+            "bucket": bucket_name,
+            "object_path": object_path,
+            "upload_url": upload_url,
+            "required_headers": {"Content-Type": content_type},
+        })
     except Exception as e:
         return _json_response({"error": str(e)}, 500)
 
@@ -364,19 +432,25 @@ def delete_portfolio_dataset_fn(req: https_fn.Request) -> https_fn.Response:
         return _json_response({"error": str(e)}, 500)
 
 
-@https_fn.on_request(cors=_CORS_ALL, timeout_sec=300)
+@https_fn.on_request(cors=_CORS_ALL, timeout_sec=540, memory=options.MemoryOption.GB_4)
 def learn_profiles(req: https_fn.Request) -> https_fn.Response:
     """Train profile clusters from test users (Firestore or disk) or retail data."""
     if req.method == "OPTIONS":
         return https_fn.Response(status=204)
+    upload_dataset_id = ""
     try:
         from profile_generator.feature_derivation import derive_batch_features
-        from profile_generator.trainer import train_profiles as _train_profiles
+        from profile_generator.trainer import learn_profiles as _learn_profiles
         from profile_generator.versioning import save_catalog
-        from profile_generator.firestore_client import fs_save_uploaded_training_dataset, fs_load_uploaded_training_dataset
-        from analysis.preprocessor import parse_csv_transactions, parse_training_records
+        from profile_generator.firestore_client import (
+            fs_save_portfolio_dataset,
+            fs_load_portfolio_dataset,
+            fs_mark_portfolio_dataset_processing,
+            fs_mark_portfolio_dataset_ready,
+            fs_mark_portfolio_dataset_failed,
+        )
+        from analysis.preprocessor import parse_csv_transactions, parse_portfolio_records_with_metadata
         from config import DEFAULT_K
-        from datetime import datetime
         import csv
         import io
 
@@ -387,53 +461,154 @@ def learn_profiles(req: https_fn.Request) -> https_fn.Response:
         upload_name = str(data.get("upload_name", "")).strip()
         upload_csv_text = str(data.get("csv_text", "") or "")
         upload_transactions = data.get("transactions", [])
-        upload_dataset_id = ""
+        upload_dataset_id = str(data.get("upload_dataset_id", "") or "")
 
         users = {}
         if source == "uploaded":
-            raw_rows: list[dict] = []
-            if upload_csv_text.strip():
-                reader = csv.DictReader(io.StringIO(upload_csv_text))
-                raw_rows = [row for row in reader]
-            elif isinstance(upload_transactions, list):
-                raw_rows = upload_transactions
+            row_count = 0
+            field_names: list[str] = []
+            if upload_dataset_id:
+                dataset = fs_load_portfolio_dataset(upload_dataset_id)
+                if not dataset:
+                    return _json_response({"error": "Uploaded dataset not found"}, 404)
+                fs_mark_portfolio_dataset_processing(upload_dataset_id)
+                storage_format = str(dataset.get("storage_format", "") or "")
+                if storage_format == "gcs":
+                    bucket_name = str(dataset.get("bucket", "") or "")
+                    object_path = str(dataset.get("object_path", "") or "")
+                    if not bucket_name or not object_path:
+                        return _json_response({"error": "Uploaded dataset metadata missing Storage location"}, 400)
+                    blob = storage.bucket(bucket_name).blob(object_path)
+                    if not blob.exists():
+                        return _json_response({"error": "Uploaded CSV file not found in Cloud Storage"}, 404)
+                    with blob.open("rt", encoding="utf-8") as fh:
+                        reader = csv.DictReader(fh)
+                        field_names = sorted([str(k) for k in (reader.fieldnames or [])])
+                        users, row_count, _ = parse_portfolio_records_with_metadata(
+                            reader,
+                            default_customer_id=upload_name,
+                        )
+                else:
+                    dataset_csv_text = str(dataset.get("csv_text", "") or "")
+                    if dataset_csv_text:
+                        reader = csv.DictReader(io.StringIO(dataset_csv_text))
+                        users, row_count, field_names = parse_portfolio_records_with_metadata(
+                            reader,
+                            default_customer_id=upload_name,
+                        )
+                    elif isinstance(dataset.get("rows"), list):
+                        users, row_count, field_names = parse_portfolio_records_with_metadata(
+                            dataset.get("rows") or [],
+                            default_customer_id=upload_name,
+                        )
+                    else:
+                        users = {}
+                        row_count = 0
+                        field_names = []
+                upload_name = str(dataset.get("upload_name", "")).strip() or upload_name
+            else:
+                # Backward-compatible direct payload path for smaller files
+                if upload_csv_text.strip():
+                    reader = csv.DictReader(io.StringIO(upload_csv_text))
+                    users, row_count, field_names = parse_portfolio_records_with_metadata(
+                        reader,
+                        default_customer_id=upload_name,
+                    )
+                elif isinstance(upload_transactions, list):
+                    users, row_count, field_names = parse_portfolio_records_with_metadata(
+                        upload_transactions,
+                        default_customer_id=upload_name,
+                    )
+                else:
+                    users = {}
+                    row_count = 0
+                    field_names = []
 
-            if not raw_rows:
+                if row_count > 0:
+                    parsed_txn_count = sum(len(u.transactions) for u in users.values())
+                    upload_dataset_id = fs_save_portfolio_dataset(
+                        upload_name=upload_name,
+                        transactions=upload_transactions if not upload_csv_text.strip() else None,
+                        csv_text=upload_csv_text,
+                        parsed_user_count=len(users),
+                        parsed_transaction_count=parsed_txn_count,
+                    )
+                    fs_mark_portfolio_dataset_processing(upload_dataset_id)
+
+            if row_count <= 0:
                 return _json_response({"error": "No uploaded transactions provided"}, 400)
 
-            users = parse_training_records(raw_rows, default_customer_id=upload_name)
             if not users:
+                if upload_dataset_id:
+                    fs_mark_portfolio_dataset_failed(upload_dataset_id, "No valid user transactions found in uploaded data")
                 return _json_response({"error": "No valid user transactions found in uploaded data"}, 400)
-            parsed_txn_count = sum(len(u.transactions) for u in users.values())
-            upload_dataset_id = fs_save_uploaded_training_dataset(
-                upload_name=upload_name,
-                transactions=raw_rows if not upload_csv_text.strip() else None,
-                csv_text=upload_csv_text,
-                parsed_user_count=len(users),
-                parsed_transaction_count=parsed_txn_count,
-            )
+
+            if upload_dataset_id:
+                fs_mark_portfolio_dataset_ready(
+                    upload_dataset_id,
+                    row_count=row_count,
+                    parsed_user_count=len(users),
+                    parsed_transaction_count=sum(len(u.transactions) for u in users.values()),
+                    field_names=field_names,
+                )
             source = f"upload:{upload_name}" if upload_name else f"upload:{upload_dataset_id}"
         elif source.startswith("uploaded-dataset:"):
             selected_dataset_id = source.split(":", 1)[1].strip()
             if not selected_dataset_id:
                 return _json_response({"error": "Missing uploaded dataset id"}, 400)
-            dataset = fs_load_uploaded_training_dataset(selected_dataset_id)
+            dataset = fs_load_portfolio_dataset(selected_dataset_id)
             if not dataset:
                 return _json_response({"error": "Uploaded dataset not found"}, 404)
-            raw_rows: list[dict] = []
-            dataset_csv_text = str(dataset.get("csv_text", "") or "")
-            if dataset_csv_text:
-                reader = csv.DictReader(io.StringIO(dataset_csv_text))
-                raw_rows = [row for row in reader]
-            elif isinstance(dataset.get("rows"), list):
-                raw_rows = dataset.get("rows") or []
-            if not raw_rows:
+            fs_mark_portfolio_dataset_processing(selected_dataset_id)
+            row_count = 0
+            field_names: list[str] = []
+            storage_format = str(dataset.get("storage_format", "") or "")
+            if storage_format == "gcs":
+                bucket_name = str(dataset.get("bucket", "") or "")
+                object_path = str(dataset.get("object_path", "") or "")
+                if not bucket_name or not object_path:
+                    return _json_response({"error": "Uploaded dataset metadata missing Storage location"}, 400)
+                blob = storage.bucket(bucket_name).blob(object_path)
+                if not blob.exists():
+                    return _json_response({"error": "Uploaded CSV file not found in Cloud Storage"}, 404)
+                with blob.open("rt", encoding="utf-8") as fh:
+                    reader = csv.DictReader(fh)
+                    field_names = sorted([str(k) for k in (reader.fieldnames or [])])
+                    users, row_count, _ = parse_portfolio_records_with_metadata(
+                        reader,
+                        default_customer_id="",
+                    )
+            else:
+                dataset_csv_text = str(dataset.get("csv_text", "") or "")
+                if dataset_csv_text:
+                    reader = csv.DictReader(io.StringIO(dataset_csv_text))
+                    users, row_count, field_names = parse_portfolio_records_with_metadata(
+                        reader,
+                        default_customer_id="",
+                    )
+                elif isinstance(dataset.get("rows"), list):
+                    users, row_count, field_names = parse_portfolio_records_with_metadata(
+                        dataset.get("rows") or [],
+                        default_customer_id="",
+                    )
+                else:
+                    users = {}
+                    row_count = 0
+                    field_names = []
+            if row_count <= 0:
                 return _json_response({"error": "Selected uploaded dataset has no rows"}, 400)
-            users = parse_training_records(raw_rows, default_customer_id="")
             if not users:
+                fs_mark_portfolio_dataset_failed(selected_dataset_id, "No valid user transactions found in selected uploaded dataset")
                 return _json_response({"error": "No valid user transactions found in selected uploaded dataset"}, 400)
             upload_dataset_id = selected_dataset_id
             upload_name = str(dataset.get("upload_name", "")).strip()
+            fs_mark_portfolio_dataset_ready(
+                upload_dataset_id,
+                row_count=row_count,
+                parsed_user_count=len(users),
+                parsed_transaction_count=sum(len(u.transactions) for u in users.values()),
+                field_names=field_names,
+            )
             source = f"upload:{upload_name}" if upload_name else f"upload:{upload_dataset_id}"
         elif source == "retail":
             from config import DATA_DIR
@@ -486,7 +661,7 @@ def learn_profiles(req: https_fn.Request) -> https_fn.Response:
 
         feature_df = derive_batch_features(users)
         if len(feature_df) < 2:
-            return _json_response({"error": "Need at least 2 users to train"}, 400)
+            return _json_response({"error": "Need at least 2 users to learn"}, 400)
 
         global_max = None
         for user_txns in users.values():
@@ -494,14 +669,22 @@ def learn_profiles(req: https_fn.Request) -> https_fn.Response:
                 if global_max is None or t.date > global_max:
                     global_max = t.date
 
-        cat = _train_profiles(feature_df, k=k, source=source, dataset_max_date=global_max)
+        cat = _learn_profiles(feature_df, k=k, source=source, dataset_max_date=global_max)
         if upload_dataset_id:
             cat.upload_dataset_id = upload_dataset_id
             cat.upload_dataset_name = upload_name
         save_catalog(cat)
         return _json_response(cat.model_dump(mode="json"))
     except Exception as e:
-        return _json_response({"error": str(e)}, 500)
+        if upload_dataset_id:
+            try:
+                from profile_generator.firestore_client import fs_mark_portfolio_dataset_failed
+                fs_mark_portfolio_dataset_failed(upload_dataset_id, f"{type(e).__name__}: {e}")
+            except Exception:
+                pass
+        print("learn_profiles exception:")
+        print(traceback.format_exc())
+        return _json_response({"error": f"{type(e).__name__}: {e}"}, 500)
 
 
 # ==================== Optimize endpoints ====================
@@ -513,7 +696,7 @@ def start_optimize_fn(req: https_fn.Request) -> https_fn.Response:
     if req.method == "OPTIONS":
         return https_fn.Response(status=204)
     try:
-        from profile_generator.experiment import start_experiment as _start_experiment
+        from profile_generator.optimization import start_optimization as _start_optimization
         data = req.get_json(silent=True) or {}
         catalog_version = data.get("catalog_version", "")
         max_iterations = data.get("max_iterations", 50)
@@ -521,13 +704,13 @@ def start_optimize_fn(req: https_fn.Request) -> https_fn.Response:
         incentive_set_version = data.get("incentive_set_version") or None
         if not catalog_version:
             return _json_response({"error": "Missing catalog_version"}, 400)
-        experiment_id = _start_experiment(
+        optimization_id = _start_optimization(
             catalog_version,
             max_iterations=int(max_iterations),
             patience=int(patience),
             incentive_set_version=incentive_set_version,
         )
-        return _json_response({"experiment_id": experiment_id})
+        return _json_response({"optimization_id": optimization_id})
     except Exception as e:
         return _json_response({"error": str(e)}, 500)
 
@@ -538,13 +721,18 @@ def optimize_status(req: https_fn.Request) -> https_fn.Response:
     if req.method == "OPTIONS":
         return https_fn.Response(status=204)
     try:
-        from profile_generator.experiment import get_experiment_status as _get_experiment_status
-        experiment_id = _extract_path_param(req, "optimize_status")
-        if not experiment_id:
-            return _json_response({"error": "Missing experiment_id"}, 400)
-        state = _get_experiment_status(experiment_id)
+        from profile_generator.optimization import (
+            get_optimization_status as _get_optimization_status,
+            advance_optimization as _advance_optimization,
+        )
+        optimization_id = _extract_path_param(req, "optimize_status")
+        if not optimization_id:
+            return _json_response({"error": "Missing optimization_id"}, 400)
+        state = _get_optimization_status(optimization_id)
         if not state:
             return _json_response({"error": "Optimization not found"}, 404)
+        if state.status == "running":
+            state = _advance_optimization(optimization_id, profiles_per_tick=1) or state
         return _json_response(state.model_dump(mode="json"))
     except Exception as e:
         return _json_response({"error": str(e)}, 500)
@@ -556,10 +744,10 @@ def list_optimizations_fn(req: https_fn.Request) -> https_fn.Response:
     if req.method == "OPTIONS":
         return https_fn.Response(status=204)
     try:
-        from profile_generator.experiment import list_experiments as _list_experiments
+        from profile_generator.optimization import list_optimizations as _list_optimizations
         catalog_version = req.args.get("catalog_version")
-        experiments = _list_experiments(catalog_version or None)
-        return _json_response({"experiments": experiments})
+        optimizations = _list_optimizations(catalog_version or None)
+        return _json_response({"optimizations": optimizations})
     except Exception as e:
         return _json_response({"error": str(e)}, 500)
 
@@ -570,11 +758,11 @@ def load_optimize_fn(req: https_fn.Request) -> https_fn.Response:
     if req.method == "OPTIONS":
         return https_fn.Response(status=204)
     try:
-        from profile_generator.experiment import load_experiment as _load_experiment
-        experiment_id = _extract_path_param(req, "load_optimize")
-        if not experiment_id:
-            return _json_response({"error": "Missing experiment_id"}, 400)
-        state = _load_experiment(experiment_id)
+        from profile_generator.optimization import load_optimization as _load_optimization
+        optimization_id = _extract_path_param(req, "load_optimize")
+        if not optimization_id:
+            return _json_response({"error": "Missing optimization_id"}, 400)
+        state = _load_optimization(optimization_id)
         if not state:
             return _json_response({"error": "Optimization not found"}, 404)
         return _json_response(state.model_dump(mode="json"))
@@ -588,11 +776,11 @@ def cancel_optimize_fn(req: https_fn.Request) -> https_fn.Response:
     if req.method == "OPTIONS":
         return https_fn.Response(status=204)
     try:
-        from profile_generator.experiment import cancel_experiment as _cancel_experiment
-        experiment_id = _extract_path_param(req, "cancel_optimize")
-        if not experiment_id:
-            return _json_response({"error": "Missing experiment_id"}, 400)
-        ok = _cancel_experiment(experiment_id)
+        from profile_generator.optimization import cancel_optimization as _cancel_optimization
+        optimization_id = _extract_path_param(req, "cancel_optimize")
+        if not optimization_id:
+            return _json_response({"error": "Missing optimization_id"}, 400)
+        ok = _cancel_optimization(optimization_id)
         if not ok:
             return _json_response({"error": "Optimization not found or not running"}, 404)
         return _json_response({"cancelled": True})
@@ -606,11 +794,11 @@ def save_optimize_fn(req: https_fn.Request) -> https_fn.Response:
     if req.method == "OPTIONS":
         return https_fn.Response(status=204)
     try:
-        from profile_generator.experiment import save_experiment as _save_experiment
-        experiment_id = _extract_path_param(req, "save_optimize")
-        if not experiment_id:
-            return _json_response({"error": "Missing experiment_id"}, 400)
-        path = _save_experiment(experiment_id)
+        from profile_generator.optimization import save_optimization as _save_optimization
+        optimization_id = _extract_path_param(req, "save_optimize")
+        if not optimization_id:
+            return _json_response({"error": "Missing optimization_id"}, 400)
+        path = _save_optimization(optimization_id)
         if not path:
             return _json_response({"error": "Optimization not found or not saveable"}, 404)
         return _json_response({"saved": True, "path": path})
@@ -624,11 +812,11 @@ def delete_optimize_fn(req: https_fn.Request) -> https_fn.Response:
     if req.method == "OPTIONS":
         return https_fn.Response(status=204)
     try:
-        from profile_generator.experiment import delete_experiment as _delete_experiment
-        experiment_id = _extract_path_param(req, "delete_optimize")
-        if not experiment_id:
-            return _json_response({"error": "Missing experiment_id"}, 400)
-        ok = _delete_experiment(experiment_id)
+        from profile_generator.optimization import delete_optimization as _delete_optimization
+        optimization_id = _extract_path_param(req, "delete_optimize")
+        if not optimization_id:
+            return _json_response({"error": "Missing optimization_id"}, 400)
+        ok = _delete_optimization(optimization_id)
         if not ok:
             return _json_response({"error": "Optimization not found"}, 404)
         return _json_response({"deleted": True})

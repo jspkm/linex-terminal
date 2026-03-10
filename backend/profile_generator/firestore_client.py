@@ -8,13 +8,14 @@ from __future__ import annotations
 
 import datetime
 import uuid
+import os
 
 import firebase_admin
-from firebase_admin import credentials, firestore, get_app
+from firebase_admin import credentials, firestore, get_app, storage
 
 from google.cloud.firestore_v1.base_query import FieldFilter
 
-from config import FIREBASE_CREDENTIALS_PATH
+from config import FIREBASE_CREDENTIALS_PATH, FIREBASE_STORAGE_BUCKET
 from models.profile_catalog import ProfileCatalog
 from models.incentive_set import IncentiveSet
 
@@ -28,13 +29,13 @@ def _get_db():
         if FIREBASE_CREDENTIALS_PATH and os.path.exists(FIREBASE_CREDENTIALS_PATH):
             cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
             try:
-                firebase_admin.initialize_app(cred)
+                firebase_admin.initialize_app(cred, {"storageBucket": FIREBASE_STORAGE_BUCKET})
             except ValueError:
                 # Another thread/process initialized already.
                 pass
         else:
             try:
-                firebase_admin.initialize_app()  # Uses Application Default Credentials (Cloud Run)
+                firebase_admin.initialize_app(options={"storageBucket": FIREBASE_STORAGE_BUCKET})  # Uses ADC (Cloud Run)
             except ValueError:
                 pass
     return firestore.client()
@@ -108,56 +109,56 @@ def fs_delete_catalog(version: str) -> bool:
 # ---------- Optimizations ----------
 
 OPTIMIZATION_COLLECTION = "optimizations"
-LEGACY_EXPERIMENT_COLLECTION = "experiments"
+LEGACY_OPTIMIZATION_COLLECTION = "experiments"
 
 
-def fs_save_experiment(state) -> str:
-    """Save an ExperimentState to Firestore. Returns the experiment_id."""
+def fs_save_optimization(state) -> str:
+    """Save an OptimizationState to Firestore. Returns the optimization_id."""
     db = _get_db()
     data = state.model_dump(mode="json")
-    db.collection(OPTIMIZATION_COLLECTION).document(state.experiment_id).set(data)
-    return state.experiment_id
+    db.collection(OPTIMIZATION_COLLECTION).document(state.optimization_id).set(data)
+    return state.optimization_id
 
 
-def fs_load_experiment(experiment_id: str):
-    """Load an ExperimentState by ID. Returns None if not found."""
-    from profile_generator.experiment import ExperimentState
+def fs_load_optimization(optimization_id: str):
+    """Load an OptimizationState by ID. Returns None if not found."""
+    from profile_generator.optimization import OptimizationState
 
     db = _get_db()
-    doc = db.collection(OPTIMIZATION_COLLECTION).document(experiment_id).get()
+    doc = db.collection(OPTIMIZATION_COLLECTION).document(optimization_id).get()
     if not doc.exists:
-        doc = db.collection(LEGACY_EXPERIMENT_COLLECTION).document(experiment_id).get()
+        doc = db.collection(LEGACY_OPTIMIZATION_COLLECTION).document(optimization_id).get()
     if not doc.exists:
         return None
     data = _serialize_dates(doc.to_dict())
-    return ExperimentState.model_validate(data)
+    return OptimizationState.model_validate(data)
 
 
-def fs_list_experiments(catalog_version: str | None = None) -> list[dict]:
+def fs_list_optimizations(catalog_version: str | None = None) -> list[dict]:
     """List saved optimizations, optionally filtered by catalog_version.
 
     Reads both `optimizations` and legacy `experiments` collections and
-    de-duplicates by experiment_id (prefers optimizations when both exist).
+    de-duplicates by optimization_id (prefers optimizations when both exist).
     """
     db = _get_db()
-    results_by_id: dict[str, dict] = {}
-    for collection_name in [LEGACY_EXPERIMENT_COLLECTION, OPTIMIZATION_COLLECTION]:
+    results_by_optimization_id: dict[str, dict] = {}
+    for collection_name in [LEGACY_OPTIMIZATION_COLLECTION, OPTIMIZATION_COLLECTION]:
         query = db.collection(collection_name)
         if catalog_version:
             query = query.where(filter=FieldFilter("catalog_version", "==", catalog_version))
         docs = query.stream()
         for doc in docs:
             data = _serialize_dates(doc.to_dict())
-            exp_id = data.get("experiment_id", doc.id)
-            results_by_id[exp_id] = {
-                "experiment_id": exp_id,
+            optimization_id = data.get("optimization_id") or data.get("experiment_id") or doc.id
+            results_by_optimization_id[optimization_id] = {
+                "optimization_id": optimization_id,
                 "catalog_version": data.get("catalog_version", ""),
                 "status": data.get("status", ""),
                 "started_at": data.get("started_at", ""),
                 "completed_at": data.get("completed_at", ""),
                 "result_count": len(data.get("results", [])),
             }
-    results = list(results_by_id.values())
+    results = list(results_by_optimization_id.values())
     results.sort(
         key=lambda e: e.get("completed_at") or e.get("started_at") or "",
         reverse=True,
@@ -165,12 +166,12 @@ def fs_list_experiments(catalog_version: str | None = None) -> list[dict]:
     return results
 
 
-def fs_delete_experiment(experiment_id: str) -> bool:
-    """Delete an experiment by ID. Returns True if it existed."""
+def fs_delete_optimization(optimization_id: str) -> bool:
+    """Delete an optimization by ID. Returns True if it existed."""
     db = _get_db()
     deleted = False
-    for collection_name in [OPTIMIZATION_COLLECTION, LEGACY_EXPERIMENT_COLLECTION]:
-        doc_ref = db.collection(collection_name).document(experiment_id)
+    for collection_name in [OPTIMIZATION_COLLECTION, LEGACY_OPTIMIZATION_COLLECTION]:
+        doc_ref = db.collection(collection_name).document(optimization_id)
         doc = doc_ref.get()
         if doc.exists:
             doc_ref.delete()
@@ -324,17 +325,17 @@ def fs_load_all_test_user_csvs() -> dict[str, str]:
 
 # ---------- Portfolio Datasets ----------
 
-UPLOADED_TRAINING_DATASET_COLLECTION = "portfolio_datasets"
+PORTFOLIO_DATASET_COLLECTION = "portfolio_datasets"
 
 
-def fs_save_uploaded_training_dataset(
+def fs_save_portfolio_dataset(
     upload_name: str,
     transactions: list[dict] | None = None,
     csv_text: str = "",
     parsed_user_count: int = 0,
     parsed_transaction_count: int = 0,
 ) -> str:
-    """Persist uploaded training rows and metadata. Returns dataset_id."""
+    """Persist uploaded portfolio rows and metadata. Returns dataset_id."""
     db = _get_db()
     dataset_id = f"upl_{uuid.uuid4().hex[:16]}"
     now_iso = datetime.datetime.utcnow().isoformat()
@@ -343,7 +344,7 @@ def fs_save_uploaded_training_dataset(
     transactions = transactions or []
 
     # Store metadata on parent doc; raw content is chunked in subcollection docs
-    dataset_ref = db.collection(UPLOADED_TRAINING_DATASET_COLLECTION).document(dataset_id)
+    dataset_ref = db.collection(PORTFOLIO_DATASET_COLLECTION).document(dataset_id)
     field_names: list[str] = []
     row_count = 0
     storage_format = "rows"
@@ -399,10 +400,78 @@ def fs_save_uploaded_training_dataset(
     return dataset_id
 
 
-def fs_list_uploaded_training_datasets() -> list[dict]:
-    """List uploaded training datasets, newest first."""
+def fs_create_portfolio_dataset_metadata(
+    upload_name: str,
+    file_name: str,
+    content_type: str,
+    size_bytes: int,
+) -> tuple[str, str, str]:
+    """Create metadata-only portfolio dataset record tied to a GCS object path."""
     db = _get_db()
-    docs = db.collection(UPLOADED_TRAINING_DATASET_COLLECTION).stream()
+    dataset_id = f"upl_{uuid.uuid4().hex[:16]}"
+    now_iso = datetime.datetime.utcnow().isoformat()
+    object_path = f"portfolio_uploads/{dataset_id}/{file_name}"
+    bucket_name = FIREBASE_STORAGE_BUCKET
+
+    db.collection(PORTFOLIO_DATASET_COLLECTION).document(dataset_id).set({
+        "dataset_id": dataset_id,
+        "upload_name": upload_name.strip(),
+        "created_at": now_iso,
+        "row_count": 0,
+        "storage_format": "gcs",
+        "field_names": [],
+        "parsed_user_count": 0,
+        "parsed_transaction_count": 0,
+        "bucket": bucket_name,
+        "object_path": object_path,
+        "content_type": content_type,
+        "size_bytes": int(size_bytes),
+        "status": "uploading",
+    })
+    return dataset_id, bucket_name, object_path
+
+
+def fs_mark_portfolio_dataset_processing(dataset_id: str) -> None:
+    db = _get_db()
+    db.collection(PORTFOLIO_DATASET_COLLECTION).document(dataset_id).set(
+        {"status": "processing"},
+        merge=True,
+    )
+
+
+def fs_mark_portfolio_dataset_ready(
+    dataset_id: str,
+    *,
+    row_count: int,
+    parsed_user_count: int,
+    parsed_transaction_count: int,
+    field_names: list[str],
+) -> None:
+    db = _get_db()
+    db.collection(PORTFOLIO_DATASET_COLLECTION).document(dataset_id).set(
+        {
+            "status": "ready",
+            "row_count": int(row_count),
+            "parsed_user_count": int(parsed_user_count),
+            "parsed_transaction_count": int(parsed_transaction_count),
+            "field_names": field_names,
+        },
+        merge=True,
+    )
+
+
+def fs_mark_portfolio_dataset_failed(dataset_id: str, error: str) -> None:
+    db = _get_db()
+    db.collection(PORTFOLIO_DATASET_COLLECTION).document(dataset_id).set(
+        {"status": "failed", "error": str(error)[:1000]},
+        merge=True,
+    )
+
+
+def fs_list_portfolio_datasets() -> list[dict]:
+    """List uploaded portfolio datasets, newest first."""
+    db = _get_db()
+    docs = db.collection(PORTFOLIO_DATASET_COLLECTION).stream()
     results: list[dict] = []
     for doc in docs:
         data = _serialize_dates(doc.to_dict() or {})
@@ -414,18 +483,19 @@ def fs_list_uploaded_training_datasets() -> list[dict]:
             "parsed_user_count": data.get("parsed_user_count", 0),
             "parsed_transaction_count": data.get("parsed_transaction_count", 0),
             "storage_format": data.get("storage_format", "rows"),
+            "status": data.get("status", ""),
         })
     results.sort(key=lambda d: d.get("created_at", ""), reverse=True)
     return results
 
 
-def fs_load_uploaded_training_dataset(dataset_id: str) -> dict | None:
+def fs_load_portfolio_dataset(dataset_id: str) -> dict | None:
     """Load a persisted uploaded dataset by ID.
 
     Returns a dict with metadata and either `csv_text` and/or `rows`.
     """
     db = _get_db()
-    dataset_ref = db.collection(UPLOADED_TRAINING_DATASET_COLLECTION).document(dataset_id)
+    dataset_ref = db.collection(PORTFOLIO_DATASET_COLLECTION).document(dataset_id)
     doc = dataset_ref.get()
     if not doc.exists:
         return None
@@ -441,6 +511,13 @@ def fs_load_uploaded_training_dataset(dataset_id: str) -> dict | None:
         "parsed_transaction_count": data.get("parsed_transaction_count", 0),
         "storage_format": storage_format,
     }
+
+    if storage_format == "gcs":
+        bucket_name = str(data.get("bucket", "") or FIREBASE_STORAGE_BUCKET)
+        object_path = str(data.get("object_path", "") or "")
+        result["bucket"] = bucket_name
+        result["object_path"] = object_path
+        return result
 
     if storage_format == "csv_text":
         chunks = list(dataset_ref.collection("csv_chunks").stream())
@@ -471,7 +548,7 @@ def fs_delete_portfolio_dataset_cascade(dataset_id: str) -> dict | None:
     Returns None if dataset doesn't exist, otherwise deletion counts.
     """
     db = _get_db()
-    dataset_ref = db.collection(UPLOADED_TRAINING_DATASET_COLLECTION).document(dataset_id)
+    dataset_ref = db.collection(PORTFOLIO_DATASET_COLLECTION).document(dataset_id)
     dataset_doc = dataset_ref.get()
     if not dataset_doc.exists:
         return None
@@ -483,6 +560,20 @@ def fs_delete_portfolio_dataset_cascade(dataset_id: str) -> dict | None:
             doc.reference.delete()
             deleted_chunk_docs += 1
 
+    # Delete referenced GCS object when present
+    dataset_data = _serialize_dates(dataset_doc.to_dict() or {})
+    storage_format = str(dataset_data.get("storage_format", "") or "")
+    if storage_format == "gcs":
+        bucket_name = str(dataset_data.get("bucket", "") or FIREBASE_STORAGE_BUCKET)
+        object_path = str(dataset_data.get("object_path", "") or "")
+        if object_path:
+            try:
+                blob = storage.bucket(bucket_name).blob(object_path)
+                if blob.exists():
+                    blob.delete()
+            except Exception:
+                pass
+
     # Find catalogs trained from this dataset
     catalog_docs = (
         db.collection(CATALOG_COLLECTION)
@@ -493,10 +584,10 @@ def fs_delete_portfolio_dataset_cascade(dataset_id: str) -> dict | None:
     for cdoc in catalog_docs:
         catalog_versions.append(cdoc.id)
 
-    deleted_experiments = 0
+    deleted_optimizations = 0
     for version in catalog_versions:
         seen_ids: set[str] = set()
-        for collection_name in [OPTIMIZATION_COLLECTION, LEGACY_EXPERIMENT_COLLECTION]:
+        for collection_name in [OPTIMIZATION_COLLECTION, LEGACY_OPTIMIZATION_COLLECTION]:
             exp_docs = (
                 db.collection(collection_name)
                 .where(filter=FieldFilter("catalog_version", "==", version))
@@ -507,7 +598,7 @@ def fs_delete_portfolio_dataset_cascade(dataset_id: str) -> dict | None:
                     continue
                 seen_ids.add(edoc.id)
                 edoc.reference.delete()
-                deleted_experiments += 1
+                deleted_optimizations += 1
 
     deleted_catalogs = 0
     for version in catalog_versions:
@@ -523,9 +614,9 @@ def fs_delete_portfolio_dataset_cascade(dataset_id: str) -> dict | None:
         "deleted_dataset": True,
         "deleted_chunk_docs": deleted_chunk_docs,
         "deleted_catalogs": deleted_catalogs,
-        "deleted_experiments": deleted_experiments,
+        "deleted_optimizations": deleted_optimizations,
         "deleted_orphan_catalogs": orphan_cleanup.get("deleted_catalogs", 0),
-        "deleted_orphan_experiments": orphan_cleanup.get("deleted_experiments", 0),
+        "deleted_orphan_optimizations": orphan_cleanup.get("deleted_optimizations", 0),
     }
 
 
@@ -534,7 +625,7 @@ def fs_delete_orphaned_portfolio_artifacts() -> dict:
     db = _get_db()
 
     dataset_ids: set[str] = set()
-    for ddoc in db.collection(UPLOADED_TRAINING_DATASET_COLLECTION).stream():
+    for ddoc in db.collection(PORTFOLIO_DATASET_COLLECTION).stream():
         dataset_ids.add(ddoc.id)
 
     orphan_catalog_versions: list[str] = []
@@ -547,10 +638,10 @@ def fs_delete_orphaned_portfolio_artifacts() -> dict:
         if not upload_dataset_id or upload_dataset_id not in dataset_ids:
             orphan_catalog_versions.append(cdoc.id)
 
-    deleted_experiments = 0
+    deleted_optimizations = 0
     for version in orphan_catalog_versions:
         seen_ids: set[str] = set()
-        for collection_name in [OPTIMIZATION_COLLECTION, LEGACY_EXPERIMENT_COLLECTION]:
+        for collection_name in [OPTIMIZATION_COLLECTION, LEGACY_OPTIMIZATION_COLLECTION]:
             exp_docs = (
                 db.collection(collection_name)
                 .where(filter=FieldFilter("catalog_version", "==", version))
@@ -561,7 +652,7 @@ def fs_delete_orphaned_portfolio_artifacts() -> dict:
                     continue
                 seen_ids.add(edoc.id)
                 edoc.reference.delete()
-                deleted_experiments += 1
+                deleted_optimizations += 1
 
     deleted_catalogs = 0
     for version in orphan_catalog_versions:
@@ -570,5 +661,5 @@ def fs_delete_orphaned_portfolio_artifacts() -> dict:
 
     return {
         "deleted_catalogs": deleted_catalogs,
-        "deleted_experiments": deleted_experiments,
+        "deleted_optimizations": deleted_optimizations,
     }

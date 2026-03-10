@@ -12,7 +12,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 from models.profile_catalog import CanonicalProfile, ProfileCatalog
-from profile_generator.experiment import (
+from profile_generator.optimization import (
     INCENTIVES,
     _INCENTIVE_COST_MAP,
     ProfileIncentiveEvaluation,
@@ -104,7 +104,7 @@ class TestEvaluateIncentiveBundle:
     def test_no_gemini_returns_baseline(self):
         """Without a Gemini client, should return baseline LTV with no incentives."""
         profile = _make_profile(ltv=500.0)
-        with patch("profile_generator.experiment._gemini", None):
+        with patch("profile_generator.optimization._gemini", None):
             result = evaluate_incentive_bundle(profile)
         assert result.net_ltv == 500.0
         assert result.selected_incentives == []
@@ -126,7 +126,7 @@ class TestEvaluateIncentiveBundle:
         mock_client = MagicMock()
         mock_client.models.generate_content.return_value = mock_response
 
-        with patch("profile_generator.experiment._gemini", mock_client):
+        with patch("profile_generator.optimization._gemini", mock_client):
             result = evaluate_incentive_bundle(profile)
 
         assert inc_name in result.selected_incentives
@@ -149,7 +149,7 @@ class TestEvaluateIncentiveBundle:
         mock_client = MagicMock()
         mock_client.models.generate_content.return_value = mock_response
 
-        with patch("profile_generator.experiment._gemini", mock_client):
+        with patch("profile_generator.optimization._gemini", mock_client):
             result = evaluate_incentive_bundle(profile)
 
         assert inc_name not in result.selected_incentives
@@ -173,7 +173,7 @@ class TestEvaluateIncentiveBundle:
         mock_client = MagicMock()
         mock_client.models.generate_content.return_value = mock_response
 
-        with patch("profile_generator.experiment._gemini", mock_client):
+        with patch("profile_generator.optimization._gemini", mock_client):
             result = evaluate_incentive_bundle(profile)
 
         assert good_name in result.selected_incentives
@@ -220,8 +220,8 @@ class TestConvergenceIteration:
                       eval_side_effect, max_iterations=50, patience=3):
         """Helper to mock load_catalog + evaluate_incentive_bundle, run the
         thread synchronously, and return the final ExperimentState."""
-        with patch("profile_generator.experiment.load_catalog", return_value=catalog), \
-             patch("profile_generator.experiment.evaluate_incentive_bundle",
+        with patch("profile_generator.optimization.load_catalog", return_value=catalog), \
+             patch("profile_generator.optimization.evaluate_incentive_bundle",
                    side_effect=eval_side_effect):
             _run_experiment_thread(
                 experiment_id, catalog_version,
@@ -449,7 +449,7 @@ class TestConvergenceIteration:
             started_at=datetime.utcnow(),
         )
 
-        with patch("profile_generator.experiment.load_catalog", return_value=None):
+        with patch("profile_generator.optimization.load_catalog", return_value=None):
             _run_experiment_thread(experiment_id, "v_missing")
 
         state = _experiments[experiment_id]
@@ -489,9 +489,9 @@ class TestConvergenceIteration:
 class TestStartExperiment:
     def test_start_creates_state_and_returns_id(self):
         """start_experiment should create state and return experiment_id."""
-        with patch("profile_generator.experiment.load_catalog",
+        with patch("profile_generator.optimization.load_catalog",
                    return_value=_make_catalog()), \
-             patch("profile_generator.experiment.evaluate_incentive_bundle",
+             patch("profile_generator.optimization.evaluate_incentive_bundle",
                    return_value=_make_eval(net_ltv=600.0)):
             eid = start_experiment("v_test", max_iterations=5, patience=2)
 
@@ -521,8 +521,8 @@ class TestStartExperiment:
 
         catalog = _make_catalog()
 
-        with patch("profile_generator.experiment.load_catalog", return_value=catalog), \
-             patch("profile_generator.experiment.evaluate_incentive_bundle",
+        with patch("profile_generator.optimization.load_catalog", return_value=catalog), \
+             patch("profile_generator.optimization.evaluate_incentive_bundle",
                    side_effect=mock_eval):
             eid = start_experiment("v_test", max_iterations=7, patience=2)
             # Wait for thread
@@ -559,8 +559,8 @@ class TestExperimentResultFields:
             started_at=datetime.utcnow(),
         )
 
-        with patch("profile_generator.experiment.load_catalog", return_value=catalog), \
-             patch("profile_generator.experiment.evaluate_incentive_bundle",
+        with patch("profile_generator.optimization.load_catalog", return_value=catalog), \
+             patch("profile_generator.optimization.evaluate_incentive_bundle",
                    side_effect=side_effect):
             _run_experiment_thread(experiment_id, "v_test", patience=2)
 

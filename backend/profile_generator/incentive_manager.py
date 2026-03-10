@@ -142,10 +142,25 @@ def generate_version(incentives: list[dict]) -> str:
 
 
 def get_incentive_cost_map(incentives: list[dict]) -> dict[str, float]:
-    """Compute effective cost map: name -> annual_cost * redemption_rate."""
+    """Compute expected effective cost map using Bayesian posterior mean uptake.
+
+    With no observed data, this defaults to redemption_rate.
+    """
+    def posterior_mean(inc: dict) -> float:
+        prior_mean = max(0.0, min(1.0, float(inc.get("redemption_rate", 0.0))))
+        prior_strength = max(1.0, float(inc.get("uptake_prior_strength", 20.0)))
+        observed_successes = max(0.0, float(inc.get("uptake_observed_successes", 0)))
+        observed_trials = max(observed_successes, float(inc.get("uptake_observed_trials", 0)))
+        alpha = prior_mean * prior_strength + observed_successes
+        beta = (1.0 - prior_mean) * prior_strength + (observed_trials - observed_successes)
+        denom = alpha + beta
+        if denom <= 0:
+            return prior_mean
+        return max(0.0, min(1.0, alpha / denom))
+
     return {
         inc["name"]: round(
-            inc["estimated_annual_cost_per_user"] * inc["redemption_rate"], 2
+            float(inc["estimated_annual_cost_per_user"]) * posterior_mean(inc), 2
         )
         for inc in incentives
     }

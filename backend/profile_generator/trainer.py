@@ -224,7 +224,7 @@ def _compute_ltv(
     return round(ltv, 2)
 
 
-def train_profiles(
+def learn_profiles(
     feature_df: pd.DataFrame,
     k: int = 10,
     source: str = "",
@@ -340,9 +340,10 @@ def train_profiles(
         core_feature_names=core_cols,
         scaling_params=scaling_params,
         profiles=profiles,
-        training_dataset_hash=dataset_hash,
+        learning_dataset_hash=dataset_hash,
         config_hash=config_hash,
-        total_training_population=total_population,
+        total_learning_population=total_population,
         source=source,
         dataset_max_date=dataset_max_date,
     )
+

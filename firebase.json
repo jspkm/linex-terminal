@@ -63,8 +63,12 @@
                 "function": "list_profile_catalogs"
             },
             {
-                "source": "/api/list_uploaded_training_datasets",
-                "function": "list_uploaded_training_datasets"
+                "source": "/api/list_portfolio_datasets",
+                "function": "list_portfolio_datasets"
+            },
+            {
+                "source": "/api/create_portfolio_upload_url",
+                "function": "create_portfolio_upload_url"
             },
             {
                 "source": "/api/profile_catalog",

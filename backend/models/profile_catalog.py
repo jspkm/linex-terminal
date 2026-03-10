@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ScalingParams(BaseModel):
@@ -39,13 +39,23 @@ class ProfileCatalog(BaseModel):
     core_feature_names: list[str] = []  # FR-2A: features used for clustering
     scaling_params: list[ScalingParams] = []
     profiles: list[CanonicalProfile] = []
-    training_dataset_hash: str = ""
+    learning_dataset_hash: str = ""
     config_hash: str = ""
-    total_training_population: int = 0  # total users in training set
+    total_learning_population: int = 0  # total users in learning set
     source: str = ""  # "retail" | "test-users"
     upload_dataset_id: str = ""  # Firestore portfolio_datasets/<id>
     upload_dataset_name: str = ""  # user-provided upload label
     dataset_max_date: datetime | None = None  # max transaction date in training set
+
+    @model_validator(mode="before")
+    @classmethod
+    def _backfill_legacy_training_fields(cls, data):
+        if isinstance(data, dict):
+            if "learning_dataset_hash" not in data and "training_dataset_hash" in data:
+                data["learning_dataset_hash"] = data.get("training_dataset_hash")
+            if "total_learning_population" not in data and "total_training_population" in data:
+                data["total_learning_population"] = data.get("total_training_population")
+        return data
 
 
 class ProfileAssignment(BaseModel):
