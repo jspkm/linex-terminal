@@ -12,6 +12,10 @@ backend/data/retail.csv
 # Environment
 .env
 .env.*
+!.env.example
+!**/.env.example
+!backend/.env.dev
+!backend/.env.prod
 
 # Virtual environments
 backend/venv/

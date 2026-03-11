@@ -9,12 +9,26 @@ Usage:
 """
 
 import json
+import sys
+import time
+import re
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 from datetime import datetime
+from firebase_admin import storage
 
 # Ensure env vars loaded before imports
-from config import GEMINI_API_KEY, MODEL
+from config import (
+    APP_ENV,
+    FIREBASE_PROJECT_ID,
+    FIREBASE_STORAGE_BUCKET,
+    GEMINI_API_KEY,
+    LOADED_ENV_FILE,
+    MODEL,
+    dev_credentials_error,
+    write_block_reason,
+    writes_allowed,
+)
 
 from analysis.feature_engine import compute_features
 from analysis.preprocessor import (
@@ -40,6 +54,31 @@ _gemini = genai.Client(api_key=GEMINI_API_KEY)
 
 app = Flask(__name__)
 CORS(app)
+
+
+@app.before_request
+def _log_request_start():
+    request._started_at = time.time()
+    print(f"[REQ] {request.method} {request.path}")
+
+
+@app.after_request
+def _log_request_end(response):
+    started_at = getattr(request, "_started_at", None)
+    duration_ms = round((time.time() - started_at) * 1000) if started_at else -1
+    print(f"[RES] {request.method} {request.path} -> {response.status_code} ({duration_ms} ms)")
+    return response
+
+
+@app.route("/healthz", methods=["GET"])
+def healthz():
+    return jsonify({
+        "ok": True,
+        "env": APP_ENV,
+        "project": FIREBASE_PROJECT_ID,
+        "bucket": FIREBASE_STORAGE_BUCKET,
+        "config": str(LOADED_ENV_FILE) if LOADED_ENV_FILE else None,
+    })
 
 
 def _strip_fences(raw: str) -> str:
@@ -72,6 +111,17 @@ def _llm_call(system: str, user_content: str) -> str:
         )
     )
     return response.text.strip()
+
+
+def _guard_write():
+    if writes_allowed():
+        return None
+    return jsonify({"error": write_block_reason()}), 403
+
+
+def _safe_file_name(name: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", name or "portfolio.csv").strip("._")
+    return cleaned or "portfolio.csv"
 
 
 def _analyze_pipeline(features, assignment, catalog, region=None):
@@ -121,7 +171,7 @@ def _analyze_streaming(features, assignment, catalog, region=None):
     return generate
 
 
-@app.route("/linexonewhitelabeler/us-central1/list_test_users", methods=["GET"])
+@app.route("/linexone-dev/us-central1/list_test_users", methods=["GET"])
 def list_test_users():
     if not TEST_USERS_DIR.exists():
         return jsonify({"user_ids": []})
@@ -133,7 +183,7 @@ def list_test_users():
     return jsonify({"user_ids": ids[:20]})
 
 
-@app.route("/linexonewhitelabeler/us-central1/analyze_test_user", methods=["POST"])
+@app.route("/linexone-dev/us-central1/analyze_test_user", methods=["POST"])
 def analyze_test_user():
     try:
         data = request.get_json(silent=True) or {}
@@ -166,7 +216,7 @@ def analyze_test_user():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/linexonewhitelabeler/us-central1/analyze_transactions", methods=["POST"])
+@app.route("/linexone-dev/us-central1/analyze_transactions", methods=["POST"])
 def analyze_transactions():
     try:
         data = request.get_json(silent=True) or {}
@@ -202,7 +252,7 @@ def analyze_transactions():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/linexonewhitelabeler/us-central1/ask_test_user", methods=["POST"])
+@app.route("/linexone-dev/us-central1/ask_test_user", methods=["POST"])
 def ask_test_user():
     try:
         if not GEMINI_API_KEY:
@@ -236,7 +286,7 @@ def ask_test_user():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/linexonewhitelabeler/us-central1/ask_qu", methods=["POST"])
+@app.route("/linexone-dev/us-central1/ask_qu", methods=["POST"])
 def ask_qu():
     try:
         if not GEMINI_API_KEY:
@@ -294,6 +344,7 @@ from profile_generator.firestore_client import (
     fs_set_default_incentive_set, fs_delete_incentive_set,
     fs_save_portfolio_dataset, fs_list_portfolio_datasets,
     fs_load_portfolio_dataset, fs_delete_portfolio_dataset_cascade,
+    fs_create_portfolio_dataset_metadata,
 )
 from models.incentive_set import Incentive, IncentiveSet
 from models.transaction import UserTransactions
@@ -357,8 +408,11 @@ def _load_retail_users(limit: int = 0) -> dict[str, UserTransactions]:
     return result
 
 
-@app.route("/linexonewhitelabeler/us-central1/learn_profiles", methods=["POST"])
+@app.route("/linexone-dev/us-central1/learn_profiles", methods=["POST"])
 def learn_profiles_endpoint():
+    blocked = _guard_write()
+    if blocked:
+        return blocked
     try:
         data = request.get_json(silent=True) or {}
         source = str(data.get("source", "test-users") or "test-users")
@@ -449,7 +503,7 @@ def learn_profiles_endpoint():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/linexonewhitelabeler/us-central1/assign_profile", methods=["POST"])
+@app.route("/linexone-dev/us-central1/assign_profile", methods=["POST"])
 def assign_profile_endpoint():
     try:
         data = request.get_json(silent=True) or {}
@@ -478,8 +532,8 @@ def assign_profile_endpoint():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/linexonewhitelabeler/us-central1/profile_catalog", methods=["GET"])
-@app.route("/linexonewhitelabeler/us-central1/profile_catalog/<version>", methods=["GET"])
+@app.route("/linexone-dev/us-central1/profile_catalog", methods=["GET"])
+@app.route("/linexone-dev/us-central1/profile_catalog/<version>", methods=["GET"])
 def get_profile_catalog_endpoint(version=None):
     try:
         if version:
@@ -495,7 +549,7 @@ def get_profile_catalog_endpoint(version=None):
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/linexonewhitelabeler/us-central1/list_profile_catalogs", methods=["GET"])
+@app.route("/linexone-dev/us-central1/list_profile_catalogs", methods=["GET"])
 def list_profile_catalogs_endpoint():
     try:
         catalogs = list_catalogs()
@@ -504,7 +558,7 @@ def list_profile_catalogs_endpoint():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/linexonewhitelabeler/us-central1/list_portfolio_datasets", methods=["GET"])
+@app.route("/linexone-dev/us-central1/list_portfolio_datasets", methods=["GET"])
 def list_portfolio_datasets_endpoint():
     try:
         datasets = fs_list_portfolio_datasets()
@@ -513,11 +567,63 @@ def list_portfolio_datasets_endpoint():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/linexone-dev/us-central1/create_portfolio_upload_url", methods=["POST"])
+def create_portfolio_upload_url_endpoint():
+    blocked = _guard_write()
+    if blocked:
+        return blocked
+    try:
+        data = request.get_json(silent=True) or {}
+        upload_name = str(data.get("upload_name", "")).strip()
+        file_name = _safe_file_name(str(data.get("file_name", "portfolio.csv")))
+        content_type = str(data.get("content_type", "text/csv") or "text/csv")
+        size_bytes = int(data.get("size_bytes", 0) or 0)
+        if not upload_name:
+            return jsonify({"error": "Missing upload_name"}), 400
+        if size_bytes <= 0:
+            return jsonify({"error": "Missing or invalid size_bytes"}), 400
+
+        dataset_id, bucket_name, object_path = fs_create_portfolio_dataset_metadata(
+            upload_name=upload_name,
+            file_name=file_name,
+            content_type=content_type,
+            size_bytes=size_bytes,
+        )
+
+        request_origin = (
+            request.headers.get("origin")
+            or request.headers.get("Origin")
+            or ""
+        ).strip()
+        upload_origin = request_origin if request_origin else None
+
+        bucket = storage.bucket(bucket_name)
+        blob = bucket.blob(object_path)
+        upload_url = blob.create_resumable_upload_session(
+            content_type=content_type,
+            size=size_bytes,
+            origin=upload_origin,
+        )
+
+        return jsonify({
+            "dataset_id": dataset_id,
+            "bucket": bucket_name,
+            "object_path": object_path,
+            "upload_url": upload_url,
+            "required_headers": {"Content-Type": content_type},
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 
-@app.route("/linexonewhitelabeler/us-central1/fork_catalog", methods=["POST"])
+
+
+@app.route("/linexone-dev/us-central1/fork_catalog", methods=["POST"])
 def fork_catalog_endpoint():
+    blocked = _guard_write()
+    if blocked:
+        return blocked
     try:
         data = request.get_json(silent=True) or {}
         source_version = data.get("source_version", "")
@@ -534,8 +640,11 @@ def fork_catalog_endpoint():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/linexonewhitelabeler/us-central1/start_optimize", methods=["POST"])
+@app.route("/linexone-dev/us-central1/start_optimize", methods=["POST"])
 def start_optimize_endpoint():
+    blocked = _guard_write()
+    if blocked:
+        return blocked
     try:
         data = request.get_json(silent=True) or {}
         catalog_version = data.get("catalog_version", "")
@@ -557,7 +666,7 @@ def start_optimize_endpoint():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/linexonewhitelabeler/us-central1/optimize_status/<optimization_id>", methods=["GET"])
+@app.route("/linexone-dev/us-central1/optimize_status/<optimization_id>", methods=["GET"])
 def get_optimize_status_endpoint(optimization_id):
     try:
         state = get_optimization_status(optimization_id)
@@ -570,7 +679,7 @@ def get_optimize_status_endpoint(optimization_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/linexonewhitelabeler/us-central1/list_optimizations", methods=["GET"])
+@app.route("/linexone-dev/us-central1/list_optimizations", methods=["GET"])
 def list_optimizations_endpoint():
     try:
         catalog_version = request.args.get("catalog_version")
@@ -579,7 +688,7 @@ def list_optimizations_endpoint():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/linexonewhitelabeler/us-central1/load_optimize/<optimization_id>", methods=["GET"])
+@app.route("/linexone-dev/us-central1/load_optimize/<optimization_id>", methods=["GET"])
 def load_optimize_endpoint(optimization_id):
     try:
         state = load_optimization(optimization_id)
@@ -589,7 +698,7 @@ def load_optimize_endpoint(optimization_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/linexonewhitelabeler/us-central1/cancel_optimize/<optimization_id>", methods=["POST"])
+@app.route("/linexone-dev/us-central1/cancel_optimize/<optimization_id>", methods=["POST"])
 def cancel_optimize_endpoint(optimization_id):
     try:
         ok = cancel_optimization(optimization_id)
@@ -599,8 +708,11 @@ def cancel_optimize_endpoint(optimization_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/linexonewhitelabeler/us-central1/save_optimize/<optimization_id>", methods=["POST"])
+@app.route("/linexone-dev/us-central1/save_optimize/<optimization_id>", methods=["POST"])
 def save_optimize_endpoint(optimization_id):
+    blocked = _guard_write()
+    if blocked:
+        return blocked
     try:
         path = save_optimization(optimization_id)
         if not path:
@@ -609,8 +721,11 @@ def save_optimize_endpoint(optimization_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/linexonewhitelabeler/us-central1/delete_optimize/<optimization_id>", methods=["DELETE"])
+@app.route("/linexone-dev/us-central1/delete_optimize/<optimization_id>", methods=["DELETE"])
 def delete_optimize_endpoint(optimization_id):
+    blocked = _guard_write()
+    if blocked:
+        return blocked
     try:
         ok = delete_optimization(optimization_id)
         if not ok:
@@ -619,8 +734,11 @@ def delete_optimize_endpoint(optimization_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/linexonewhitelabeler/us-central1/delete_catalog/<version>", methods=["DELETE"])
+@app.route("/linexone-dev/us-central1/delete_catalog/<version>", methods=["DELETE"])
 def delete_catalog_endpoint(version):
+    blocked = _guard_write()
+    if blocked:
+        return blocked
     try:
         ok = delete_catalog(version)
         if not ok:
@@ -630,8 +748,11 @@ def delete_catalog_endpoint(version):
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/linexonewhitelabeler/us-central1/delete_portfolio_dataset/<dataset_id>", methods=["DELETE"])
+@app.route("/linexone-dev/us-central1/delete_portfolio_dataset/<dataset_id>", methods=["DELETE"])
 def delete_portfolio_dataset_endpoint(dataset_id):
+    blocked = _guard_write()
+    if blocked:
+        return blocked
     try:
         result = fs_delete_portfolio_dataset_cascade(dataset_id)
         if not result:
@@ -642,7 +763,7 @@ def delete_portfolio_dataset_endpoint(dataset_id):
 
 # ---------- Incentive Sets ----------
 
-@app.route("/linexonewhitelabeler/us-central1/list_incentive_sets", methods=["GET"])
+@app.route("/linexone-dev/us-central1/list_incentive_sets", methods=["GET"])
 def list_incentive_sets_endpoint():
     try:
         sets = fs_list_incentive_sets()
@@ -650,8 +771,8 @@ def list_incentive_sets_endpoint():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/linexonewhitelabeler/us-central1/incentive_set", methods=["GET"])
-@app.route("/linexonewhitelabeler/us-central1/incentive_set/<version>", methods=["GET"])
+@app.route("/linexone-dev/us-central1/incentive_set", methods=["GET"])
+@app.route("/linexone-dev/us-central1/incentive_set/<version>", methods=["GET"])
 def get_incentive_set_endpoint(version=None):
     try:
         if version:
@@ -659,6 +780,9 @@ def get_incentive_set_endpoint(version=None):
         else:
             inc_set = fs_get_default_incentive_set()
             if not inc_set:
+                blocked = _guard_write()
+                if blocked:
+                    return blocked
                 # Auto-seed the default on first access
                 inc_set = load_or_seed_default()
         if not inc_set:
@@ -667,8 +791,11 @@ def get_incentive_set_endpoint(version=None):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/linexonewhitelabeler/us-central1/create_incentive_set", methods=["POST"])
+@app.route("/linexone-dev/us-central1/create_incentive_set", methods=["POST"])
 def create_incentive_set_endpoint():
+    blocked = _guard_write()
+    if blocked:
+        return blocked
     try:
         data = request.get_json(silent=True) or {}
         name = data.get("name", "")
@@ -700,8 +827,11 @@ def create_incentive_set_endpoint():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/linexonewhitelabeler/us-central1/set_default_incentive_set/<version>", methods=["POST"])
+@app.route("/linexone-dev/us-central1/set_default_incentive_set/<version>", methods=["POST"])
 def set_default_incentive_set_endpoint(version):
+    blocked = _guard_write()
+    if blocked:
+        return blocked
     try:
         ok = fs_set_default_incentive_set(version)
         if not ok:
@@ -710,8 +840,11 @@ def set_default_incentive_set_endpoint(version):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/linexonewhitelabeler/us-central1/delete_incentive_set/<version>", methods=["DELETE"])
+@app.route("/linexone-dev/us-central1/delete_incentive_set/<version>", methods=["DELETE"])
 def delete_incentive_set_endpoint(version):
+    blocked = _guard_write()
+    if blocked:
+        return blocked
     try:
         ok = fs_delete_incentive_set(version)
         if not ok:
@@ -722,35 +855,59 @@ def delete_incentive_set_endpoint(version):
 
 
 if __name__ == "__main__":
-    print(f"Starting local dev server on http://127.0.0.1:5050 (model: {MODEL})")
+    startup_error = dev_credentials_error()
+    if startup_error:
+        print("=" * 72)
+        print("LINEX PROFILER LOCAL DEV SERVER")
+        print("=" * 72)
+        print("Startup: FAILED")
+        print(f"Reason:  {startup_error}")
+        print("=" * 72)
+        sys.exit(1)
+    print("=" * 72)
+    print("LINEX PROFILER LOCAL DEV SERVER")
+    print("=" * 72)
+    print("Server:  http://127.0.0.1:5050")
+    print(f"Model:   {MODEL}")
+    print(f"Env:     {APP_ENV}")
+    print(f"Config:  {LOADED_ENV_FILE if LOADED_ENV_FILE else 'process environment only'}")
+    print(f"Project: {FIREBASE_PROJECT_ID}")
+    print(f"Bucket:  {FIREBASE_STORAGE_BUCKET}")
+    if writes_allowed():
+        print("Writes:  ENABLED")
+    else:
+        print("Writes:  BLOCKED")
+        print(f"Reason:  {write_block_reason()}")
+    print("=" * 72)
     print("Functions available:")
-    print("  - GET  /linexonewhitelabeler/us-central1/list_test_users")
-    print("  - POST /linexonewhitelabeler/us-central1/analyze_test_user")
-    print("  - POST /linexonewhitelabeler/us-central1/analyze_transactions")
-    print("  - POST /linexonewhitelabeler/us-central1/ask_test_user")
-    print("  - POST /linexonewhitelabeler/us-central1/ask_qu")
+    print("  - GET  /linexone-dev/us-central1/list_test_users")
+    print("  - POST /linexone-dev/us-central1/analyze_test_user")
+    print("  - POST /linexone-dev/us-central1/analyze_transactions")
+    print("  - POST /linexone-dev/us-central1/ask_test_user")
+    print("  - POST /linexone-dev/us-central1/ask_qu")
     print("  Profile Generator:")
-    print("  - POST /linexonewhitelabeler/us-central1/learn_profiles")
-    print("  - POST /linexonewhitelabeler/us-central1/assign_profile")
-    print("  - GET  /linexonewhitelabeler/us-central1/profile_catalog")
-    print("  - GET  /linexonewhitelabeler/us-central1/list_profile_catalogs")
-    print("  - GET  /linexonewhitelabeler/us-central1/list_portfolio_datasets")
-    print("  - POST /linexonewhitelabeler/us-central1/fork_catalog")
+    print("  - POST /linexone-dev/us-central1/learn_profiles")
+    print("  - POST /linexone-dev/us-central1/assign_profile")
+    print("  - GET  /linexone-dev/us-central1/profile_catalog")
+    print("  - GET  /linexone-dev/us-central1/list_profile_catalogs")
+    print("  - GET  /linexone-dev/us-central1/list_portfolio_datasets")
+    print("  - POST /linexone-dev/us-central1/create_portfolio_upload_url")
+    print("  - POST /linexone-dev/us-central1/fork_catalog")
     print("  Optimize:")
-    print("  - POST /linexonewhitelabeler/us-central1/start_optimize")
-    print("  - GET  /linexonewhitelabeler/us-central1/optimize_status/<id>")
-    print("  - GET  /linexonewhitelabeler/us-central1/list_optimizations")
-    print("  - GET  /linexonewhitelabeler/us-central1/load_optimize/<id>")
-    print("  - POST /linexonewhitelabeler/us-central1/cancel_optimize/<id>")
-    print("  - POST /linexonewhitelabeler/us-central1/save_optimize/<id>")
-    print("  - DEL  /linexonewhitelabeler/us-central1/delete_optimize/<id>")
-    print("  - DEL  /linexonewhitelabeler/us-central1/delete_catalog/<version>")
-    print("  - DEL  /linexonewhitelabeler/us-central1/delete_portfolio_dataset/<dataset_id>")
+    print("  - POST /linexone-dev/us-central1/start_optimize")
+    print("  - GET  /linexone-dev/us-central1/optimize_status/<id>")
+    print("  - GET  /linexone-dev/us-central1/list_optimizations")
+    print("  - GET  /linexone-dev/us-central1/load_optimize/<id>")
+    print("  - POST /linexone-dev/us-central1/cancel_optimize/<id>")
+    print("  - POST /linexone-dev/us-central1/save_optimize/<id>")
+    print("  - DEL  /linexone-dev/us-central1/delete_optimize/<id>")
+    print("  - DEL  /linexone-dev/us-central1/delete_catalog/<version>")
+    print("  - DEL  /linexone-dev/us-central1/delete_portfolio_dataset/<dataset_id>")
     print("  Incentive Sets:")
-    print("  - GET  /linexonewhitelabeler/us-central1/list_incentive_sets")
-    print("  - GET  /linexonewhitelabeler/us-central1/incentive_set")
-    print("  - GET  /linexonewhitelabeler/us-central1/incentive_set/<version>")
-    print("  - POST /linexonewhitelabeler/us-central1/create_incentive_set")
-    print("  - POST /linexonewhitelabeler/us-central1/set_default_incentive_set/<version>")
-    print("  - DEL  /linexonewhitelabeler/us-central1/delete_incentive_set/<version>")
+    print("  - GET  /linexone-dev/us-central1/list_incentive_sets")
+    print("  - GET  /linexone-dev/us-central1/incentive_set")
+    print("  - GET  /linexone-dev/us-central1/incentive_set/<version>")
+    print("  - POST /linexone-dev/us-central1/create_incentive_set")
+    print("  - POST /linexone-dev/us-central1/set_default_incentive_set/<version>")
+    print("  - DEL  /linexone-dev/us-central1/delete_incentive_set/<version>")
     app.run(host="127.0.0.1", port=5050, debug=False)

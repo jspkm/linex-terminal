@@ -18,7 +18,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 import firebase_admin
 from firebase_admin import credentials, firestore
-from config import CARDS_PATH, FIREBASE_CREDENTIALS_PATH
+from config import CARDS_PATH, FIREBASE_CREDENTIALS_PATH, local_write_safety_error
 
 # ISO-3 country code mapping
 REGION_TO_ISO = {
@@ -235,4 +235,8 @@ def upload_cards():
 
 
 if __name__ == "__main__":
+    safety_error = local_write_safety_error()
+    if safety_error:
+        print(f"Startup: FAILED\nReason:  {safety_error}")
+        sys.exit(1)
     upload_cards()

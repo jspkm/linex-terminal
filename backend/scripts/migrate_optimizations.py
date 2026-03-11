@@ -13,6 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from config import local_write_safety_error  # noqa: E402
 from profile_generator.firestore_client import (  # noqa: E402
     _get_db,
     LEGACY_EXPERIMENT_COLLECTION,
@@ -40,4 +41,8 @@ def migrate() -> None:
 
 
 if __name__ == "__main__":
+    safety_error = local_write_safety_error()
+    if safety_error:
+        print(f"Startup: FAILED\nReason:  {safety_error}")
+        sys.exit(1)
     migrate()

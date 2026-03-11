@@ -16,12 +16,16 @@ from firebase_admin import initialize_app, credentials, get_app, storage
 import firebase_admin
 
 from config import (
+    APP_ENV,
     CARDS_PATH,
     FIREBASE_CREDENTIALS_PATH,
+    FIREBASE_PROJECT_ID,
     FIREBASE_STORAGE_BUCKET,
     GEMINI_API_KEY,
     MODEL,
     TEST_USERS_DIR,
+    write_block_reason,
+    writes_allowed,
 )
 
 # Initialize Firebase Admin SDK (lightweight — no Firestore queries)
@@ -85,6 +89,12 @@ def _extract_path_param(req, endpoint_name):
 def _safe_file_name(name: str) -> str:
     cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", name or "portfolio.csv").strip("._")
     return cleaned or "portfolio.csv"
+
+
+def _guard_write():
+    if writes_allowed():
+        return None
+    return _json_response({"error": write_block_reason()}, 403)
 
 
 # ==================== Original endpoints ====================
@@ -311,6 +321,9 @@ def create_portfolio_upload_url(req: https_fn.Request) -> https_fn.Response:
     """Create a signed Cloud Storage upload URL and dataset metadata doc."""
     if req.method == "OPTIONS":
         return https_fn.Response(status=204)
+    blocked = _guard_write()
+    if blocked:
+        return blocked
     try:
         from profile_generator.firestore_client import fs_create_portfolio_dataset_metadata
 
@@ -381,6 +394,9 @@ def fork_catalog_fn(req: https_fn.Request) -> https_fn.Response:
     """Fork an existing catalog with optional modifications."""
     if req.method == "OPTIONS":
         return https_fn.Response(status=204)
+    blocked = _guard_write()
+    if blocked:
+        return blocked
     try:
         from profile_generator.versioning import fork_catalog
         data = req.get_json(silent=True) or {}
@@ -401,6 +417,9 @@ def delete_catalog_fn(req: https_fn.Request) -> https_fn.Response:
     """Delete a catalog by version."""
     if req.method == "OPTIONS":
         return https_fn.Response(status=204)
+    blocked = _guard_write()
+    if blocked:
+        return blocked
     try:
         from profile_generator.versioning import delete_catalog
         version = _extract_path_param(req, "delete_catalog")
@@ -419,6 +438,9 @@ def delete_portfolio_dataset_fn(req: https_fn.Request) -> https_fn.Response:
     """Delete a portfolio dataset and all associated catalogs/optimizations."""
     if req.method == "OPTIONS":
         return https_fn.Response(status=204)
+    blocked = _guard_write()
+    if blocked:
+        return blocked
     try:
         from profile_generator.firestore_client import fs_delete_portfolio_dataset_cascade
         dataset_id = _extract_path_param(req, "delete_portfolio_dataset")
@@ -437,6 +459,9 @@ def learn_profiles(req: https_fn.Request) -> https_fn.Response:
     """Train profile clusters from test users (Firestore or disk) or retail data."""
     if req.method == "OPTIONS":
         return https_fn.Response(status=204)
+    blocked = _guard_write()
+    if blocked:
+        return blocked
     upload_dataset_id = ""
     try:
         from profile_generator.feature_derivation import derive_batch_features
@@ -695,6 +720,9 @@ def start_optimize_fn(req: https_fn.Request) -> https_fn.Response:
     """Start an LTV optimization run."""
     if req.method == "OPTIONS":
         return https_fn.Response(status=204)
+    blocked = _guard_write()
+    if blocked:
+        return blocked
     try:
         from profile_generator.optimization import start_optimization as _start_optimization
         data = req.get_json(silent=True) or {}
@@ -793,6 +821,9 @@ def save_optimize_fn(req: https_fn.Request) -> https_fn.Response:
     """Persist a completed optimization to Firestore."""
     if req.method == "OPTIONS":
         return https_fn.Response(status=204)
+    blocked = _guard_write()
+    if blocked:
+        return blocked
     try:
         from profile_generator.optimization import save_optimization as _save_optimization
         optimization_id = _extract_path_param(req, "save_optimize")
@@ -811,6 +842,9 @@ def delete_optimize_fn(req: https_fn.Request) -> https_fn.Response:
     """Delete an optimization run from memory and Firestore."""
     if req.method == "OPTIONS":
         return https_fn.Response(status=204)
+    blocked = _guard_write()
+    if blocked:
+        return blocked
     try:
         from profile_generator.optimization import delete_optimization as _delete_optimization
         optimization_id = _extract_path_param(req, "delete_optimize")
@@ -856,6 +890,9 @@ def incentive_set(req: https_fn.Request) -> https_fn.Response:
         else:
             inc_set = fs_get_default_incentive_set()
             if not inc_set:
+                blocked = _guard_write()
+                if blocked:
+                    return blocked
                 inc_set = load_or_seed_default()
         if not inc_set:
             return _json_response({"error": "Incentive set not found"}, 404)
@@ -869,6 +906,9 @@ def create_incentive_set_fn(req: https_fn.Request) -> https_fn.Response:
     """Create a new incentive set."""
     if req.method == "OPTIONS":
         return https_fn.Response(status=204)
+    blocked = _guard_write()
+    if blocked:
+        return blocked
     try:
         from profile_generator.firestore_client import (
             fs_save_incentive_set, fs_set_default_incentive_set,
@@ -903,6 +943,9 @@ def set_default_incentive_set_fn(req: https_fn.Request) -> https_fn.Response:
     """Set an incentive set as the default."""
     if req.method == "OPTIONS":
         return https_fn.Response(status=204)
+    blocked = _guard_write()
+    if blocked:
+        return blocked
     try:
         from profile_generator.firestore_client import fs_set_default_incentive_set
         version = _extract_path_param(req, "set_default_incentive_set")
@@ -921,6 +964,9 @@ def delete_incentive_set_fn(req: https_fn.Request) -> https_fn.Response:
     """Delete an incentive set."""
     if req.method == "OPTIONS":
         return https_fn.Response(status=204)
+    blocked = _guard_write()
+    if blocked:
+        return blocked
     try:
         from profile_generator.firestore_client import fs_delete_incentive_set
         version = _extract_path_param(req, "delete_incentive_set")
@@ -932,3 +978,8 @@ def delete_incentive_set_fn(req: https_fn.Request) -> https_fn.Response:
         return _json_response({"deleted": True})
     except Exception as e:
         return _json_response({"error": str(e)}, 500)
+
+
+print(
+    f"Backend config: env={APP_ENV} project={FIREBASE_PROJECT_ID} bucket={FIREBASE_STORAGE_BUCKET}"
+)

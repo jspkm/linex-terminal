@@ -14,7 +14,7 @@ from pathlib import Path
 # Add backend to path so imports work
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from config import TEST_USERS_DIR
+from config import TEST_USERS_DIR, local_write_safety_error
 from profile_generator.firestore_client import fs_save_test_user, fs_list_test_user_ids
 
 
@@ -70,4 +70,8 @@ def migrate_test_users():
 
 
 if __name__ == "__main__":
+    safety_error = local_write_safety_error()
+    if safety_error:
+        print(f"Startup: FAILED\nReason:  {safety_error}")
+        sys.exit(1)
     migrate_test_users()

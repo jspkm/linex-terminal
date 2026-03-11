@@ -1,0 +1,8 @@
+{
+  "name": "linexprofiler-workspace",
+  "private": true,
+  "scripts": {
+    "dev:check": "bash scripts/dev-check.sh",
+    "dev:all": "npm run dev:check && bash -lc 'trap \"kill 0\" EXIT INT TERM; (cd backend && source venv/bin/activate && python dev_server.py) & (cd web && npm run dev) & wait'"
+  }
+}

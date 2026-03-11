@@ -45,17 +45,27 @@ pip install -r requirements.txt
 pip install flask flask-cors python-dotenv
 ```
 
-Create `backend/.env`:
+Local backend startup defaults to `backend/.env.dev` when `backend/.env` is absent.
 
+If you want a machine-specific override, create `backend/.env`:
+
+```bash
+cp backend/.env.dev backend/.env
 ```
-GEMINI_API_KEY=your-key-here
-```
+
+The checked-in development defaults target the separate Firebase project `linexone-dev`, not production.
 
 ### 2. Frontend
 
 ```bash
 cd web
 npm install
+```
+
+Frontend local startup defaults to `web/.env.dev`. If you want a machine-specific override, create `web/.env.local`:
+
+```bash
+cp web/.env.dev web/.env.local
 ```
 
 ## Development
@@ -78,6 +88,62 @@ npm run dev
 ```
 
 The frontend automatically routes API calls to `localhost:5050` in development mode.
+
+Or start both from the repo root:
+
+```bash
+npm run dev:all
+```
+
+Preflight the local setup without starting servers:
+
+```bash
+npm run dev:check
+```
+
+## Environment Split
+
+Use configuration, not branches, to separate local development from production:
+
+- `backend/.env`: optional machine-specific override, if you need one
+- `backend/.env.dev`: tracked development env template
+- `backend/.env.prod`: tracked production reference template
+- `web/.env.dev`: tracked local frontend API base URL
+- `web/.env.local`: optional machine-specific frontend override
+- Firebase Hosting in production: frontend uses `/api` rewrites from [`firebase.json`](/Users/jspkm/dev/linexProfiler/firebase.json)
+
+Frontend behavior:
+
+- Local dev: set `NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:5050/linexone-dev/us-central1`
+- Production on Firebase Hosting: leave `NEXT_PUBLIC_API_BASE_URL` unset so the app uses `/api`
+- Production outside Firebase Hosting: set `NEXT_PUBLIC_API_BASE_URL` to the deployed backend base URL
+
+This means `main` can serve both environments without code edits.
+
+Backend behavior:
+
+- Local development defaults to `LINEX_ENV=development`
+- Development Firebase project defaults to `GCLOUD_PROJECT=linexone-dev`
+- Production defaults to `GCLOUD_PROJECT=linexonewhitelabeler` when running in Cloud Functions
+- Non-production environments are blocked from write operations if they are pointed at the production Firebase project
+
+## Firebase Projects
+
+Use two separate projects:
+
+- Development: `linexone-dev`
+- Production: `linexonewhitelabeler`
+
+For local work, keep `backend/.env.dev` valid or create a machine-specific `backend/.env`.
+
+To inspect production settings without making them active locally, review `backend/.env.prod`.
+
+For Firebase CLI commands, switch aliases explicitly:
+
+```bash
+firebase use dev
+firebase use prod
+```
 
 ### API Endpoints
 

@@ -5,9 +5,10 @@ import Papa from "papaparse";
 import { Upload, FileText, Search, Activity, Loader2, Users, PanelLeft, Boxes, ChevronDown, ChevronRight, Square, Trash2, ArrowUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const CLOUD_FUNCTION_URL = process.env.NODE_ENV === "development"
-  ? "http://127.0.0.1:5050/linexonewhitelabeler/us-central1"
-  : "/api";
+const DEFAULT_LOCAL_API_BASE_URL = "http://127.0.0.1:5050/linexone-dev/us-central1";
+const CLOUD_FUNCTION_URL = process.env.NEXT_PUBLIC_API_BASE_URL?.trim()
+  || (process.env.NODE_ENV === "development" ? DEFAULT_LOCAL_API_BASE_URL : "/api");
+const DATASETS_URL = `${CLOUD_FUNCTION_URL}/list_portfolio_datasets`;
 const OPTIMIZATION_CACHE_STORAGE_KEY = "linex.optimizationCache.v2";
 
 // FR-2A: Behavioral axes — mirrors backend CORE_AXES
@@ -376,7 +377,8 @@ export default function Home() {
           throw new Error("Enter a name for this upload");
         }
 
-        const uploadUrlRes = await fetch(`${CLOUD_FUNCTION_URL}/create_portfolio_upload_url`, {
+        const uploadInitUrl = `${CLOUD_FUNCTION_URL}/create_portfolio_upload_url`;
+        const uploadUrlRes = await fetch(uploadInitUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -386,33 +388,49 @@ export default function Home() {
             size_bytes: learnUploadFile.size,
           }),
         });
-        if (!uploadUrlRes.ok) {
-          const errData = await uploadUrlRes.json().catch(() => ({}));
-          throw new Error(errData.error || "Failed to prepare upload");
-        }
-        const uploadMeta = await uploadUrlRes.json();
-        const datasetId = String(uploadMeta.dataset_id || "");
-        const uploadUrl = String(uploadMeta.upload_url || "");
-        const requiredHeaders = uploadMeta.required_headers || {};
-        if (!datasetId || !uploadUrl) {
-          throw new Error("Upload initialization response missing dataset_id/upload_url");
-        }
+        if (uploadUrlRes.ok) {
+          const uploadMeta = await uploadUrlRes.json();
+          const datasetId = String(uploadMeta.dataset_id || "");
+          const uploadUrl = String(uploadMeta.upload_url || "");
+          const requiredHeaders = uploadMeta.required_headers || {};
+          if (!datasetId || !uploadUrl) {
+            throw new Error("Upload initialization response missing dataset_id/upload_url");
+          }
 
-        setLearnStatus("Uploading... 0%");
-        await putFileToSignedUrlWithProgress(
-          uploadUrl,
-          learnUploadFile,
-          requiredHeaders,
-          (pct) => setLearnStatus(`Uploading... ${pct}%`),
-          540000,
-        );
-        setLearnUploadSubmitted(true);
-        body = {
-          source: "uploaded",
-          k: learnK,
-          upload_dataset_id: datasetId,
-          upload_name: currentUploadName,
-        };
+          setLearnStatus("Uploading... 0%");
+          await putFileToSignedUrlWithProgress(
+            uploadUrl,
+            learnUploadFile,
+            requiredHeaders,
+            (pct) => setLearnStatus(`Uploading... ${pct}%`),
+            540000,
+          );
+          setLearnUploadSubmitted(true);
+          body = {
+            source: "uploaded",
+            k: learnK,
+            upload_dataset_id: datasetId,
+            upload_name: currentUploadName,
+          };
+        } else {
+          const errData = await uploadUrlRes.json().catch(() => ({}));
+          const detail = String(errData?.error || "").trim();
+          const canFallbackToDirectCsv =
+            /bucket does not exist|billing account.*disabled|storage/i.test(detail);
+          if (!canFallbackToDirectCsv) {
+            throw new Error(detail || `Failed to prepare upload (${uploadUrlRes.status}) at ${uploadInitUrl}`);
+          }
+
+          // Storage upload path unavailable (e.g., missing bucket/billing); send CSV directly.
+          setLearnStatus("Storage unavailable. Sending CSV directly...");
+          const csvText = await learnUploadFile.text();
+          body = {
+            source: "uploaded",
+            k: learnK,
+            upload_name: currentUploadName,
+            csv_text: csvText,
+          };
+        }
       } else {
         setLearnStatus("Learning...");
       }
@@ -625,16 +643,16 @@ export default function Home() {
 
   const fetchUploadedDatasets = async () => {
     try {
-      const res = await fetch(`${CLOUD_FUNCTION_URL}/list_portfolio_datasets`);
+      const res = await fetch(DATASETS_URL);
       if (res.ok) {
         const data = await res.json();
         setUploadedDatasets(data.datasets || []);
       } else {
         const errData = await res.json().catch(() => ({}));
-        setGenError(errData.error || "Failed to load uploaded datasets. Redeploy backend/hosting rewrites if this endpoint is missing.");
+        setGenError(errData.error || `Failed to load uploaded datasets from ${DATASETS_URL}`);
       }
     } catch {
-      setGenError("Failed to load uploaded datasets. Check backend availability.");
+      setGenError(`Failed to reach ${DATASETS_URL}. Check backend availability and CORS/network errors in the browser console.`);
     }
   };
 

@@ -1,8 +1,17 @@
 {
   "projects": {
-    "default": "linexonewhitelabeler"
+    "default": "linexonewhitelabeler",
+    "prod": "linexonewhitelabeler",
+    "dev": "linexone-dev"
   },
   "targets": {
+    "linexone-dev": {
+      "hosting": {
+        "linexprofiler": [
+          "linexprofiler"
+        ]
+      }
+    },
     "linexonewhitelabeler": {
       "hosting": {
         "linexprofiler": [

@@ -14,7 +14,7 @@ from pathlib import Path
 # Add backend to path so imports work
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from config import PROFILE_CATALOG_DIR, EXPERIMENT_DIR
+from config import PROFILE_CATALOG_DIR, EXPERIMENT_DIR, local_write_safety_error
 from models.profile_catalog import ProfileCatalog
 from profile_generator.optimization import ExperimentState
 from profile_generator.firestore_client import (
@@ -89,6 +89,10 @@ def seed_incentives():
 
 
 if __name__ == "__main__":
+    safety_error = local_write_safety_error()
+    if safety_error:
+        print(f"Startup: FAILED\nReason:  {safety_error}")
+        sys.exit(1)
     print("=== Migrating Profile Catalogs ===")
     migrate_catalogs()
 
