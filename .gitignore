@@ -33,6 +33,9 @@ venv/
 # Claude
 .claude/
 
+# Codex
+.codex/
+
 # Node / Frontend
 node_modules/
 
