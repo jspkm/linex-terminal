@@ -46,3 +46,8 @@ firebase-debug.log
 
 # Mock users / Test Data
 backend/data/test-users/
+
+# local env files
+backend/.env.dev
+backend/.env.prod
+*.env
