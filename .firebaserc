@@ -7,14 +7,14 @@
   "targets": {
     "linexone-dev": {
       "hosting": {
-        "linexprofiler": [
+        "linex-terminal": [
           "linexprofiler"
         ]
       }
     },
     "linexonewhitelabeler": {
       "hosting": {
-        "linexprofiler": [
+        "linex-terminal": [
           "linexprofiler"
         ]
       }

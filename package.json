@@ -1,5 +1,5 @@
 {
-  "name": "linexprofiler-workspace",
+  "name": "linex-terminal-workspace",
   "private": true,
   "scripts": {
     "dev:check": "bash scripts/dev-check.sh",

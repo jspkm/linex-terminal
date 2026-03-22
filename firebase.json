@@ -26,7 +26,7 @@
         ]
     },
     "hosting": {
-        "target": "linexprofiler",
+        "target": "linex-terminal",
         "public": "web/out",
         "ignore": [
             "firebase.json",

@@ -5,7 +5,7 @@ A financial profiling agent for the Linex loyalty platform. Analyzes transaction
 ## Architecture
 
 ```
-linexProfiler/
+linex-terminal/
 ├── backend/          Python API (Firebase Cloud Functions + Flask dev server)
 │   ├── analysis/     Feature engineering, profiling, card matching
 │   ├── cards/        Credit card catalog and uploader
@@ -110,7 +110,7 @@ Use configuration, not branches, to separate local development from production:
 - `backend/.env.prod`: tracked production reference template
 - `web/.env.dev`: tracked local frontend API base URL
 - `web/.env.local`: optional machine-specific frontend override
-- Firebase Hosting in production: frontend uses `/api` rewrites from [`firebase.json`](/Users/jspkm/dev/linexProfiler/firebase.json)
+- Firebase Hosting in production: frontend uses `/api` rewrites from [`firebase.json`](/Users/jspkm/dev/linex-terminal/firebase.json)
 
 Frontend behavior:
 
