@@ -1,53 +1,19 @@
-<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Linex Logo - AI-first loyalty program framework -->
-  <!-- Organic starburst with interconnected nodes suggesting loyalty connections + AI network -->
-  
-  <defs>
-    <linearGradient id="linexGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#6366F1"/>
-      <stop offset="50%" style="stop-color:#8B5CF6"/>
-      <stop offset="100%" style="stop-color:#A855F7"/>
-    </linearGradient>
-  </defs>
-  
-  <!-- Center node -->
-  <circle cx="32" cy="32" r="5" fill="url(#linexGradient)"/>
-  
-  <!-- Organic rays with varying thickness - like loyalty connections -->
-  <!-- Top -->
-  <path d="M32 27 Q33 20 32 10 Q31 20 32 27" fill="url(#linexGradient)"/>
-  <!-- Top-right -->
-  <path d="M35 29 Q40 24 46 16 Q38 25 35 29" fill="url(#linexGradient)"/>
-  <!-- Right -->
-  <path d="M37 32 Q44 31 54 32 Q44 33 37 32" fill="url(#linexGradient)"/>
-  <!-- Bottom-right -->
-  <path d="M35 35 Q40 40 46 48 Q38 39 35 35" fill="url(#linexGradient)"/>
-  <!-- Bottom -->
-  <path d="M32 37 Q33 44 32 54 Q31 44 32 37" fill="url(#linexGradient)"/>
-  <!-- Bottom-left -->
-  <path d="M29 35 Q24 40 18 48 Q26 39 29 35" fill="url(#linexGradient)"/>
-  <!-- Left -->
-  <path d="M27 32 Q20 31 10 32 Q20 33 27 32" fill="url(#linexGradient)"/>
-  <!-- Top-left -->
-  <path d="M29 29 Q24 24 18 16 Q26 25 29 29" fill="url(#linexGradient)"/>
-  
-  <!-- Additional shorter rays for fullness -->
-  <path d="M33.5 28 Q36 22 38 14 Q34 23 33.5 28" fill="url(#linexGradient)" opacity="0.7"/>
-  <path d="M36 30 Q42 27 50 22 Q40 28 36 30" fill="url(#linexGradient)" opacity="0.7"/>
-  <path d="M36 34 Q42 37 50 42 Q40 36 36 34" fill="url(#linexGradient)" opacity="0.7"/>
-  <path d="M33.5 36 Q36 42 38 50 Q34 41 33.5 36" fill="url(#linexGradient)" opacity="0.7"/>
-  <path d="M30.5 36 Q28 42 26 50 Q30 41 30.5 36" fill="url(#linexGradient)" opacity="0.7"/>
-  <path d="M28 34 Q22 37 14 42 Q24 36 28 34" fill="url(#linexGradient)" opacity="0.7"/>
-  <path d="M28 30 Q22 27 14 22 Q24 28 28 30" fill="url(#linexGradient)" opacity="0.7"/>
-  <path d="M30.5 28 Q28 22 26 14 Q30 23 30.5 28" fill="url(#linexGradient)" opacity="0.7"/>
-  
-  <!-- Small connection dots at ray tips - representing loyalty network nodes -->
-  <circle cx="32" cy="10" r="2" fill="url(#linexGradient)"/>
-  <circle cx="46" cy="16" r="1.5" fill="url(#linexGradient)"/>
-  <circle cx="54" cy="32" r="2" fill="url(#linexGradient)"/>
-  <circle cx="46" cy="48" r="1.5" fill="url(#linexGradient)"/>
-  <circle cx="32" cy="54" r="2" fill="url(#linexGradient)"/>
-  <circle cx="18" cy="48" r="1.5" fill="url(#linexGradient)"/>
-  <circle cx="10" cy="32" r="2" fill="url(#linexGradient)"/>
-  <circle cx="18" cy="16" r="1.5" fill="url(#linexGradient)"/>
+<svg width="100" height="100" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="100" height="100" fill="black"/>
+<rect x="16" y="12" width="12" height="75" fill="white"/>
+<rect x="87" y="75" width="12" height="71" transform="rotate(90 87 75)" fill="white"/>
+<rect x="84.9233" y="65.3658" width="9.36322" height="64.6938" transform="rotate(144.823 84.9233 65.3658)" fill="#66FF99"/>
+<rect x="46.3066" y="70.9053" width="9.06185" height="64.9394" transform="rotate(-143.736 46.3066 70.9053)" fill="#66FF99"/>
+<rect x="39" y="66" width="46" height="6" fill="black"/>
+<rect x="39" y="13" width="46" height="6" fill="black"/>
+<rect x="87" y="23" width="4" height="71" transform="rotate(90 87 23)" fill="black"/>
+<rect x="28" y="15" width="4" height="12" transform="rotate(90 28 15)" fill="black"/>
+<rect x="86" y="31" width="4" height="71" transform="rotate(90 86 31)" fill="black"/>
+<rect x="87" y="39" width="4" height="71" transform="rotate(90 87 39)" fill="black"/>
+<rect x="86" y="47" width="4" height="71" transform="rotate(90 86 47)" fill="black"/>
+<rect x="87" y="55" width="4" height="71" transform="rotate(90 87 55)" fill="black"/>
+<rect x="86" y="63" width="4" height="71" transform="rotate(90 86 63)" fill="black"/>
+<rect x="87" y="71" width="4" height="71" transform="rotate(90 87 71)" fill="black"/>
+<rect x="90" y="79" width="4" height="75" transform="rotate(90 90 79)" fill="black"/>
+<rect x="90" y="87" width="4" height="75" transform="rotate(90 90 87)" fill="black"/>
 </svg>

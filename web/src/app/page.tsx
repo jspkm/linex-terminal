@@ -2,39 +2,27 @@
 
 import { useState, useEffect, useCallback, useMemo, Fragment, useRef } from "react";
 import Papa from "papaparse";
-import { Upload, FileText, Search, Activity, Loader2, Users, PanelLeft, Boxes, ChevronDown, ChevronRight, Square, Trash2, ArrowUp, MoveHorizontal } from "lucide-react";
+import { Upload, FileText, Search, Activity, Loader2, Users, Boxes, ChevronDown, ChevronRight, Square, Trash2, ArrowUp, MoveHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-const DEFAULT_LOCAL_API_BASE_URL = "http://127.0.0.1:5050/linexone-dev/us-central1";
-const CLOUD_FUNCTION_URL = process.env.NEXT_PUBLIC_API_BASE_URL?.trim()
-  || (process.env.NODE_ENV === "development" ? DEFAULT_LOCAL_API_BASE_URL : "/api");
-const DATASETS_URL = `${CLOUD_FUNCTION_URL}/list_portfolio_datasets`;
-const OPTIMIZATION_CACHE_STORAGE_KEY = "linex.optimizationCache.v2";
-
-// FR-2A: Behavioral axes — mirrors backend CORE_AXES
-const BEHAVIORAL_AXES: { axis: string; label: string; features: string[] }[] = [
-  { axis: "activity_recency", label: "Activity Recency", features: ["recency_days", "active_months", "temporal_spread"] },
-  { axis: "purchase_frequency", label: "Purchase Frequency", features: ["frequency_per_month", "transaction_count", "cadence_mean", "cadence_std"] },
-  { axis: "spend_intensity", label: "Spend Intensity", features: ["total_spend", "avg_order_value", "max_order_value", "unique_products", "product_diversity"] },
-  { axis: "refund_return", label: "Refund / Return", features: ["cancellation_rate", "cancellation_count"] },
-];
-const PRIMARY_FEATURES = new Set(BEHAVIORAL_AXES.map(a => a.features[0]));
-
-type View = "profiler" | "generator";
-type ProfilerTab = "test" | "upload";
-type GeneratorTab = "learn" | "catalog" | "optimize";
+import NavRail from "./components/NavRail";
+import WelcomeCanvas from "./components/WelcomeCanvas";
+import WorkflowCanvas from "./components/WorkflowCanvas";
+import DataroomCanvas from "./components/DataroomCanvas";
+import Dropdown from "./components/Dropdown";
+import { C, BEHAVIORAL_AXES, PRIMARY_FEATURES, CLOUD_FUNCTION_URL, DATASETS_URL, OPTIMIZATION_CACHE_STORAGE_KEY, type View, type ProfilerTab, type GeneratorTab } from "./components/theme";
 
 export default function Home() {
-  const [activeView, setActiveView] = useState<View>("profiler");
+  const [activeView, setActiveView] = useState<View>("welcome");
   const [profilerTab, setProfilerTab] = useState<ProfilerTab>("test");
   const [generatorTab, setGeneratorTab] = useState<GeneratorTab>("learn");
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [quChatDraft, setQuChatDraft] = useState("");
   const [quChatMessages, setQuChatMessages] = useState<Array<{ id: string; text: string; submittedAt: string }>>([]);
   const [typedWelcomeLine, setTypedWelcomeLine] = useState("");
   const [splitRatio, setSplitRatio] = useState(50);
   const [isResizingSplit, setIsResizingSplit] = useState(false);
   const [isDesktopViewport, setIsDesktopViewport] = useState(false);
+  const [showRecentCatalogDetail, setShowRecentCatalogDetail] = useState(false);
+  const [showRecentIncentiveDetail, setShowRecentIncentiveDetail] = useState(false);
 
   // Test Users State
   const [testUserIds, setTestUserIds] = useState<string[]>([]);
@@ -67,7 +55,7 @@ export default function Home() {
   const [catalog, setCatalog] = useState<any>(null);
   const [catalogList, setCatalogList] = useState<any[]>([]);
   const [selectedCatalogVersion, setSelectedCatalogVersion] = useState("");
-  const [expandedProfile, setExpandedProfile] = useState<string | null>(null);
+  const [expandedProfileId, setExpandedProfile] = useState<string | null>(null);
 
   // Optimization State
   const [optimizationId, setOptimizationId] = useState<string | null>(null);
@@ -732,7 +720,7 @@ export default function Home() {
 
   // Load catalog list when switching to generator view
   useEffect(() => {
-    if (activeView === "generator") {
+    if (activeView === "generator" || activeView === "welcome") {
       fetchCatalogList();
       fetchUploadedDatasets();
     }
@@ -768,12 +756,15 @@ export default function Home() {
 
   // Catalog + optimize bootstrap when switching tabs.
   useEffect(() => {
-    if (activeView === "generator" && generatorTab === "catalog") {
+    if (activeView === "welcome") {
+      // Home loads all data for the active workflow template
       loadCatalog(selectedCatalogVersion || undefined);
-    }
-    if (activeView === "generator" && generatorTab === "optimize") {
-      fetchIncentiveSets();
       fetchSavedOptimizations(selectedCatalogVersion || undefined);
+      fetchIncentiveSets();
+    } else if (activeView === "generator") {
+      if (generatorTab === "catalog") loadCatalog(selectedCatalogVersion || undefined);
+      if (generatorTab === "optimize") fetchSavedOptimizations(selectedCatalogVersion || undefined);
+      fetchIncentiveSets();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeView, generatorTab]);
@@ -1024,7 +1015,7 @@ export default function Home() {
   };
 
   useEffect(() => {
-    if (activeView === "generator" && generatorTab === "optimize") {
+    if (activeView === "welcome" || (activeView === "generator" && generatorTab === "optimize")) {
       loadIncentiveSetDetail(selectedIncentiveSetVersion || undefined);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1062,7 +1053,14 @@ export default function Home() {
   };
 
   useEffect(() => {
-    if (activeView !== "generator" || generatorTab !== "optimize" || !selectedCatalogVersion) return;
+    if (activeView === "welcome") {
+      // Home view: restore cache regardless of generatorTab
+      if (!selectedCatalogVersion) return;
+    } else if (activeView === "generator") {
+      if (generatorTab !== "optimize" || !selectedCatalogVersion) return;
+    } else {
+      return;
+    }
     if (optimizeInProgress && optimizationId) return;
     const cachedOptimizationId = optimizationLatestByCatalogRef.current[selectedCatalogVersion];
     if (!cachedOptimizationId) return;
@@ -1076,7 +1074,7 @@ export default function Home() {
   }, [activeView, generatorTab, optimizeInProgress, optimizationId, optimizationState, selectedCatalogVersion]);
 
   useEffect(() => {
-    if (activeView === "generator" && selectedCatalogVersion) {
+    if ((activeView === "generator" || activeView === "welcome") && selectedCatalogVersion) {
       fetchSavedOptimizations(selectedCatalogVersion);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1149,82 +1147,53 @@ export default function Home() {
     submitQuChat();
   };
 
-
   return (
-    <div className="terminal-shell flex min-h-screen flex-col md:flex-row">
-      {/* Sidebar */}
-      <aside
-        className={cn(
-          "border-b md:border-b-0 md:border-r border-[#BFBFBF]/30 bg-[#080b0a]/90 py-3 md:py-6 w-full md:w-auto px-3 md:px-0 flex flex-col shrink-0 transition-[width] duration-300 ease-in-out overflow-hidden",
-          isSidebarOpen ? "md:w-56 md:px-4" : "md:w-16 md:px-2 md:items-center"
-        )}
-      >
-        <div className={cn("mb-3 md:mb-8 flex items-center", isSidebarOpen ? "justify-between w-full pl-2" : "justify-center")}>
-          {isSidebarOpen && (
-            <div className="whitespace-nowrap">
-              <h1 className="text-sm font-semibold tracking-[0.08em] text-black">LINEX Terminal</h1>
-            </div>
-          )}
-          <button
-            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className={cn("hidden md:inline-flex p-1.5 text-slate-500 hover:bg-slate-200 rounded-md shrink-0", isSidebarOpen ? "-mr-2" : "")}
-            title={isSidebarOpen ? "Close sidebar" : "Open sidebar"}
-          >
-            <PanelLeft className="h-5 w-5" />
-          </button>
-        </div>
+    <div className="flex h-screen overflow-hidden" style={{ background: C.bg, fontFamily: "'IBM Plex Mono', 'SF Mono', Menlo, monospace", color: C.text }}>
+      <NavRail
+        view={activeView}
+        setView={(v) => {
+          setActiveView(v);
+        }}
+      />
 
-        <nav className="grid grid-cols-2 gap-2 w-full md:grid-cols-1 md:gap-1">
-          <button
-            onClick={() => setActiveView("profiler")}
-            className={cn(
-              "flex w-full items-center rounded-md py-2 text-sm font-medium transition-colors border border-transparent justify-center md:justify-start",
-              isSidebarOpen ? "px-3 gap-3" : "px-0 md:justify-center",
-              activeView === "profiler"
-                ? "bg-slate-200 text-slate-900 border-black"
-                : "text-slate-600 hover:bg-slate-100"
-            )}
-            title={!isSidebarOpen ? "User Profiler" : undefined}
-          >
-            <Activity className="h-5 w-5 shrink-0" />
-            {isSidebarOpen && <span className="whitespace-nowrap uppercase tracking-[0.08em] text-[11px]">User Profiler</span>}
-          </button>
-          <button
-            onClick={() => setActiveView("generator")}
-            className={cn(
-              "flex w-full items-center rounded-md py-2 text-sm font-medium transition-colors border border-transparent justify-center md:justify-start",
-              isSidebarOpen ? "px-3 gap-3" : "px-0 md:justify-center",
-              activeView === "generator"
-                ? "bg-slate-200 text-slate-900 border-black"
-                : "text-slate-600 hover:bg-slate-100"
-            )}
-            title={!isSidebarOpen ? "Profile Generator" : undefined}
-          >
-            <Boxes className="h-5 w-5 shrink-0" />
-            {isSidebarOpen && <span className="whitespace-nowrap uppercase tracking-[0.08em] text-[11px]">Profile Generator</span>}
-          </button>
-        </nav>
-      </aside>
-
-      {/* Main Content */}
-      <main className="flex-1 min-w-0 transition-all duration-300 ease-in-out">
+      {/* Canvas — full remaining width */}
+      <div className="flex-1 overflow-hidden" style={{ background: "#070a09" }}>
         <div
           ref={splitContainerRef}
-          className="relative flex h-full min-h-screen overflow-hidden bg-[#070a09]"
+          className="relative flex h-full overflow-hidden bg-[#070a09]"
         >
-            <section
-              className="min-h-0 overflow-auto p-3 md:p-4"
-              style={{ width: isDesktopViewport ? `${splitRatio}%` : "100%" }}
-            >
-              <div className="mx-auto max-w-6xl space-y-6">
-            {error && (
-              <div className="rounded-md bg-red-50 p-4 text-red-700 border border-red-200">
-                {error}
-              </div>
+          <section
+            className="min-h-0 overflow-auto"
+            style={{ width: isDesktopViewport ? `${splitRatio}%` : "100%" }}
+          >
+            {/* Home shows the active workflow template (default: Profile Generator) */}
+
+            {activeView === "workflow" && (
+              <WorkflowCanvas
+                onTemplate={(t) => {
+                  if (t.cat === "User Profiler") {
+                    setActiveView("profiler");
+                    setProfilerTab("test");
+                  } else if (t.cat === "Profile Generator") {
+                    setActiveView("generator");
+                    setGeneratorTab("catalog");
+                  }
+                }}
+              />
             )}
 
-            {activeView === "profiler" ? (
-              <div className="space-y-6">
+            {activeView === "dataroom" && <DataroomCanvas />}
+
+            {activeView === "profiler" && (
+              <div className="p-3 md:p-4">
+                <div className="mx-auto max-w-6xl space-y-6">
+                  {error && (
+                    <div className="rounded-md bg-red-50 p-4 text-red-700 border border-red-200">
+                      {error}
+                    </div>
+                  )}
+
+                  <div className="space-y-6">
 
                 <div className="rounded-xl border border-[#E5E7EB] bg-white shadow-sm flex flex-col min-h-[260px]">
                   {/* Tabs Header */}
@@ -1367,8 +1336,20 @@ export default function Home() {
                     )}
                   </div>
                 )}
+                  </div>
+                </div>
               </div>
-            ) : activeView === "generator" ? (
+            )}
+
+            {(activeView === "welcome" || activeView === "generator") && (
+              <div className="p-3 md:p-4">
+                <div className="mx-auto max-w-6xl space-y-6">
+                  {activeView === "generator" && genError && (
+                    <div className="rounded-md bg-red-50 p-4 text-red-700 border border-red-200">
+                      {genError}
+                    </div>
+                  )}
+              {activeView === "generator" &&
               <ProfileGeneratorView
                 genLoading={genLoading}
                 genError={genError}
@@ -1397,7 +1378,7 @@ export default function Home() {
                 selectedCatalogVersion={selectedCatalogVersion}
                 setSelectedCatalogVersion={setSelectedCatalogVersion}
                 loadCatalog={loadCatalog}
-                expandedProfile={expandedProfile}
+                expandedProfileId={expandedProfileId}
                 setExpandedProfile={setExpandedProfile}
                 startOptimization={startOptimization}
                 stopOptimization={stopOptimization}
@@ -1418,20 +1399,299 @@ export default function Home() {
                 selectedIncentiveSetDetail={selectedIncentiveSetDetail}
                 incentiveSetDetailLoading={incentiveSetDetailLoading}
               />
-            ) : null}
-              </div>
-            </section>
+              }
 
-            {isDesktopViewport && (
-              <>
-                <aside className="min-h-0 flex-1 overflow-hidden bg-[#111820] p-3 md:p-4">
+              {/* Most Recent Optimal Incentive Program */}
+              <div className="mt-8 space-y-4">
+                  <h3 className="text-xs font-bold tracking-wider" style={{ color: "#00aaff" }}>Optimize Portfolio</h3>
+
+                  {/* Context dropdowns */}
+                  <div className="flex flex-col gap-4 max-w-[66%]">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] tracking-wider font-semibold" style={{ color: C.muted }}>Portfolio</label>
+                      <div className="flex items-center gap-2">
+                        <Dropdown
+                          value={learnSource}
+                          options={uploadedDatasets.map((d: any) => ({
+                            value: `uploaded-dataset:${d.dataset_id}`,
+                            label: `${d.upload_name || d.dataset_id} (${d.row_count || 0} rows)`,
+                          }))}
+                          onChange={(val) => {
+                            setLearnSource(val);
+                            const newDatasetId = val.startsWith("uploaded-dataset:") ? val.replace("uploaded-dataset:", "") : "";
+                            const newDataset = uploadedDatasets.find((d: any) => d.dataset_id === newDatasetId);
+                            const newName = newDataset?.upload_name || newDatasetId;
+                            const newRowCount = Number(newDataset?.row_count ?? 0);
+                            const hasCatalogs = newRowCount > 0 && catalogList.some((c: any) => String(c.source || "").toLowerCase().includes(newName.toLowerCase()));
+                            if (hasCatalogs && selectedCatalogVersion) {
+                              fetchSavedOptimizations(selectedCatalogVersion);
+                            } else {
+                              setOptimizationState(null);
+                              setSelectedSavedOptimizationId("");
+                            }
+                          }}
+                          className="w-full"
+                        />
+                        <span className="text-[10px] tracking-wider shrink-0 invisible">Show</span>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] tracking-wider font-semibold" style={{ color: C.muted }}>Profile</label>
+                      {(() => {
+                        const selectedDatasetId = learnSource.startsWith("uploaded-dataset:") ? learnSource.replace("uploaded-dataset:", "") : "";
+                        const selectedDataset = uploadedDatasets.find((d: any) => d.dataset_id === selectedDatasetId);
+                        const portfolioName = selectedDataset?.upload_name || selectedDatasetId;
+                        const portfolioRowCount = Number(selectedDataset?.row_count ?? 0);
+                        const filtered = portfolioRowCount === 0 ? [] : catalogList.filter((c: any) => {
+                          if (!portfolioName) return true;
+                          const src = String(c.source || "").toLowerCase();
+                          return src.includes(portfolioName.toLowerCase());
+                        });
+                        return filtered.length > 0 ? (
+                          <>
+                            <div className="flex items-center gap-2">
+                              <Dropdown
+                                value={selectedCatalogVersion}
+                                options={filtered.map((c: any) => ({
+                                  value: c.version,
+                                  label: `${c.version} (${c.profile_count} profiles)`,
+                                }))}
+                                onChange={(val) => {
+                                  setSelectedCatalogVersion(val);
+                                  loadCatalog(val);
+                                  fetchSavedOptimizations(val);
+                                  setShowRecentCatalogDetail(false);
+                                }}
+                                mono
+                                className="w-full"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowRecentCatalogDetail(v => !v)}
+                                className="text-[10px] tracking-wider hover:underline underline-offset-2 shrink-0"
+                                style={{ color: C.accentDim }}
+                              >
+                                {showRecentCatalogDetail ? "Hide" : "Show"}
+                              </button>
+                            </div>
+                            {showRecentCatalogDetail && catalog && (
+                              <div className="mt-2 rounded-lg border overflow-x-auto" style={{ borderColor: C.border, background: C.surface }}>
+                                <div className="px-3 py-2 border-b text-[10px] tracking-wider font-semibold" style={{ borderColor: C.border, color: C.muted }}>
+                                  Version: <span className="font-mono">{catalog.version}</span> · Source: {catalog.source} · K={catalog.k}
+                                  {catalog.total_learning_population > 0 && ` · ${catalog.total_learning_population.toLocaleString()} users`}
+                                </div>
+                                <table className="w-full text-xs">
+                                  <thead>
+                                    <tr style={{ borderBottom: `1px solid ${C.border}`, color: C.muted }}>
+                                      <th className="py-2 px-3 text-left font-medium w-8"></th>
+                                      <th className="py-2 pr-4 text-left font-medium">Profile ID</th>
+                                      <th className="py-2 pr-4 text-left font-medium">Description</th>
+                                      <th className="py-2 pr-4 text-right font-medium">Portfolio LTV</th>
+                                      <th className="py-2 pr-4 text-right font-medium">Population</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {catalog.profiles.map((p: any) => (
+                                      <tr key={p.profile_id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                                        <td className="py-2 px-3" style={{ color: C.muted }}>
+                                          <ChevronRight className="h-3 w-3" />
+                                        </td>
+                                        <td className="py-2 pr-4">
+                                          <div className="flex items-center gap-2">
+                                            <span className={cn(
+                                              "inline-flex items-center justify-center rounded-full text-white text-[10px] font-bold w-6 h-6 shrink-0",
+                                              p.description?.toLowerCase().includes("return-heavy") ? "bg-amber-600" : "bg-[#2f9a67]"
+                                            )}>
+                                              {p.profile_id}
+                                            </span>
+                                            {p.label && <span className="text-[10px] font-semibold" style={{ color: C.muted }}>{p.label}</span>}
+                                          </div>
+                                        </td>
+                                        <td className="py-2 pr-4" style={{ color: C.textSec }}>{p.description}</td>
+                                        <td className="py-2 pr-4 text-right font-mono" style={{ color: C.textSec }}>
+                                          {p.portfolio_ltv != null ? `${p.portfolio_ltv < 0 ? '-' : ''}$${Math.abs(p.portfolio_ltv).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '—'}
+                                        </td>
+                                        <td className="py-2 pr-4 text-right font-mono" style={{ color: C.muted }}>
+                                          {p.population_count > 0 ? p.population_count.toLocaleString() : ''}
+                                          <span className="ml-1">({(p.population_share * 100).toFixed(1)}%)</span>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                    <tr style={{ background: C.surfaceLt }}>
+                                      <td className="py-3 px-3" colSpan={3}>
+                                        <span className="text-[9px] tracking-wider font-bold" style={{ color: C.muted }}>Total Portfolio LTV</span>
+                                      </td>
+                                      <td className="py-3 pr-4 text-right font-mono font-bold" style={{ color: C.text, borderTop: `1px solid ${C.border}` }}>
+                                        {(() => {
+                                          const total = catalog.profiles.reduce((s: number, p: any) => s + (p.portfolio_ltv || 0), 0);
+                                          return `${total < 0 ? '-' : ''}$${Math.abs(total).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+                                        })()}
+                                      </td>
+                                      <td style={{ borderTop: `1px solid ${C.border}` }}></td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-xs px-3 py-1.5" style={{ color: C.muted }}>No profiles for this portfolio</span>
+                        );
+                      })()}
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] tracking-wider font-semibold" style={{ color: C.muted }}>Incentive Set</label>
+                      <div className="flex items-center gap-2">
+                        <Dropdown
+                          value={selectedIncentiveSetVersion || optimizationState?.incentive_set_version || ""}
+                          options={incentiveSets.map((s: any) => ({
+                            value: s.version,
+                            label: `${s.name || s.version} (${s.incentive_count} incentives)${s.is_default ? " *" : ""}`,
+                          }))}
+                          onChange={(val) => {
+                            setSelectedIncentiveSetVersion(val);
+                            setOptimizationState(null);
+                            setSelectedSavedOptimizationId("");
+                            setShowRecentIncentiveDetail(false);
+                          }}
+                          className="w-full"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = !showRecentIncentiveDetail;
+                            setShowRecentIncentiveDetail(next);
+                            if (next && !selectedIncentiveSetDetail) {
+                              loadIncentiveSetDetail(selectedIncentiveSetVersion || optimizationState?.incentive_set_version || undefined);
+                            }
+                          }}
+                          className="text-[10px] tracking-wider hover:underline underline-offset-2 shrink-0"
+                          style={{ color: C.accentDim }}
+                        >
+                          {showRecentIncentiveDetail ? "Hide" : "Show"}
+                        </button>
+                      </div>
+                      {showRecentIncentiveDetail && selectedIncentiveSetDetail && (
+                        <div className="mt-2 rounded-lg border overflow-hidden" style={{ borderColor: C.border, background: C.surface }}>
+                          <div className="px-3 py-2 border-b text-[10px] tracking-wider font-semibold" style={{ borderColor: C.border, color: C.muted }}>
+                            {selectedIncentiveSetDetail.name || selectedIncentiveSetDetail.version} ({(selectedIncentiveSetDetail.incentives || []).length} incentives)
+                          </div>
+                          <div className="px-3 py-2">
+                            {(selectedIncentiveSetDetail.incentives || []).length === 0 ? (
+                              <p className="text-xs" style={{ color: C.muted }}>No incentives loaded.</p>
+                            ) : (
+                              <div className="flex flex-wrap gap-1.5">
+                                {(selectedIncentiveSetDetail.incentives || []).map((inc: any, idx: number) => (
+                                  <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium border" style={{ borderColor: C.border, background: "white", color: "black" }}>
+                                    {inc.name}
+                                    <span style={{ color: C.muted }}>
+                                      ${Math.round((inc.estimated_annual_cost_per_user || 0) * (inc.redemption_rate || 1))}
+                                    </span>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Results table */}
+                  {optimizationState?.results && optimizationState.results.length > 0 && (
+                  <div className="rounded-xl border px-6 pb-6 pt-3 space-y-4" style={{ borderColor: C.border, background: C.surface }}>
+                    <h4 className="text-xs font-bold tracking-wider" style={{ color: "#00aaff" }}>Optimal Incentive Program</h4>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr style={{ borderBottom: `1px solid ${C.border}`, color: C.muted }}>
+                            <th className="py-2 pr-4 font-medium text-left">Profile ID</th>
+                            <th className="py-2 pr-4 font-medium text-left">Assigned Incentive(s)</th>
+                            <th className="py-2 pr-4 font-medium text-right">Orig LTV</th>
+                            <th className="py-2 pr-4 font-medium text-right">Gross LTV</th>
+                            <th className="py-2 pr-4 font-medium text-right">Cost</th>
+                            <th className="py-2 pr-4 font-medium text-right">Lift</th>
+                            <th className="py-2 pr-4 font-bold text-right">Final LTV</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {optimizationState.results.map((r: any) => (
+                            <tr key={r.profile_id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                              <td className="py-3 pr-4 font-semibold" style={{ color: C.text }}>{r.profile_id}</td>
+                              <td className="py-3 pr-4">
+                                <div className="flex flex-wrap gap-1">
+                                  {(r.selected_incentives || []).map((inc: string, idx: number) => (
+                                    <span key={idx} className="inline-flex px-2 py-0.5 rounded text-xs font-semibold bg-white text-black">
+                                      {inc}
+                                    </span>
+                                  ))}
+                                  {(!r.selected_incentives || r.selected_incentives.length === 0) && (
+                                    <span className="text-xs" style={{ color: C.muted }}>None</span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="py-3 pr-4 text-right font-mono" style={{ color: C.muted }}>
+                                {`$${Math.round(r.original_portfolio_ltv).toLocaleString('en-US')}`}
+                              </td>
+                              <td className="py-3 pr-4 text-right font-mono" style={{ color: C.textSec }}>
+                                {`$${Math.round(r.new_gross_portfolio_ltv).toLocaleString('en-US')}`}
+                              </td>
+                              <td className="py-3 pr-4 text-right font-mono" style={{ color: C.textSec }}>
+                                {`${r.portfolio_cost > 0 ? '-' : ''}$${Math.round(Math.abs(r.portfolio_cost)).toLocaleString('en-US')}`}
+                              </td>
+                              <td className="py-3 pr-4 text-right font-mono" style={{ color: C.textSec }}>
+                                {`+$${Math.round(r.lift).toLocaleString('en-US')}`}
+                              </td>
+                              <td className="py-3 pr-4 text-right font-mono font-bold" style={{ color: C.text }}>
+                                {`$${Math.round(r.new_net_portfolio_ltv).toLocaleString('en-US')}`}
+                              </td>
+                            </tr>
+                          ))}
+                          <tr style={{ background: C.surfaceLt }}>
+                            <td className="py-4 pr-4" colSpan={2}>
+                              <span className="text-[10px] tracking-wider font-bold" style={{ color: C.muted }}>Maximized Total Portfolio</span>
+                            </td>
+                            <td className="py-4 pr-4 text-right font-mono font-bold" style={{ color: C.text, borderTop: `1px solid ${C.border}` }}>
+                              {`$${Math.round(optimizationState.results.reduce((s: number, r: any) => s + (r.original_portfolio_ltv || 0), 0)).toLocaleString('en-US')}`}
+                            </td>
+                            <td className="py-4 pr-4 text-right font-mono" style={{ color: C.textSec, borderTop: `1px solid ${C.border}` }}>
+                              {`$${Math.round(optimizationState.results.reduce((s: number, r: any) => s + (r.new_gross_portfolio_ltv || 0), 0)).toLocaleString('en-US')}`}
+                            </td>
+                            <td className="py-4 pr-4 text-right font-mono" style={{ color: C.textSec, borderTop: `1px solid ${C.border}` }}>
+                              {`-$${Math.round(optimizationState.results.reduce((s: number, r: any) => s + (r.portfolio_cost || 0), 0)).toLocaleString('en-US')}`}
+                            </td>
+                            <td className="py-4 pr-4 text-right font-mono font-bold" style={{ color: C.textSec, borderTop: `1px solid ${C.border}` }}>
+                              {`+$${Math.round(optimizationState.results.reduce((s: number, r: any) => s + (r.lift || 0), 0)).toLocaleString('en-US')}`}
+                            </td>
+                            <td className="py-4 pr-4 text-right font-mono font-bold" style={{ color: C.text, borderTop: `1px solid ${C.border}` }}>
+                              {`$${Math.round(optimizationState.results.reduce((s: number, r: any) => s + (r.new_net_portfolio_ltv || 0), 0)).toLocaleString('en-US')}`}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="text-xs px-1" style={{ color: C.muted }}>
+                      Convergence-based optimization: each profile iterates until rolling outcomes statistically stabilize (low variance + near-zero trend), with max-iteration and patience guards. Only net-positive incentives retained (marginal LTV &gt; effective cost).
+                    </div>
+                  </div>
+                  )}
+              </div>
+                </div>
+              </div>
+            )}
+
+          </section>
+
+          {isDesktopViewport && (
+            <>
+              <aside className="min-h-0 flex-1 overflow-hidden bg-[#111820] p-3 md:p-4">
                   <div className="flex h-full min-h-0 flex-col">
                     <div className="flex min-h-0 flex-1 flex-col bg-transparent">
                       <div className="min-h-0 flex-1 overflow-auto px-4 py-1 flex flex-col justify-end">
                         {quChatMessages.length === 0 ? (
                           <div className="mb-0.5 flex items-center gap-2.5">
                             <img src="/linex-icon.svg" alt="QU" className="h-[14px] w-[14px] shrink-0" />
-                            <h2 className="text-small leading-tight text-slate-900">
+                            <h2 className="text-sm leading-tight text-[#2f9a67]">
                               {typedWelcomeLine}
                             </h2>
                           </div>
@@ -1456,6 +1716,7 @@ export default function Home() {
                             {">"}
                           </span>
                         <textarea
+                          autoFocus
                           value={quChatDraft}
                           onChange={(e) => setQuChatDraft(e.target.value)}
                           onKeyDown={handleQuChatKeyDown}
@@ -1467,7 +1728,7 @@ export default function Home() {
                             aria-label="Submit"
                             title="Submit"
                             disabled={!quChatDraft.trim()}
-                            className="absolute bottom-4 right-3 rounded-full bg-black w-8 h-8 text-white hover:opacity-80 disabled:opacity-50 flex items-center justify-center"
+                            className="absolute bottom-4 right-3 rounded-full bg-[#66ff99] w-8 h-8 text-black hover:opacity-80 disabled:opacity-30 flex items-center justify-center"
                           >
                             <ArrowUp className="h-4 w-4" strokeWidth={2.25} />
                           </button>
@@ -1490,17 +1751,11 @@ export default function Home() {
                     "pointer-events-none absolute inset-y-0 left-1/2 w-[2px] -translate-x-1/2 bg-[#66ff99] transition-opacity duration-150",
                     isResizingSplit ? "opacity-100" : "opacity-0 group-hover/divider:opacity-100",
                   )} />
-                  <div className={cn(
-                    "pointer-events-none relative inline-flex h-11 w-11 items-center justify-center rounded-lg border border-white/65 bg-[#0a0d0c] text-[#66ff99] transition-opacity duration-150",
-                    isResizingSplit ? "opacity-100" : "opacity-0 group-hover/divider:opacity-100",
-                  )}>
-                    <MoveHorizontal className="h-5 w-5" />
-                  </div>
                 </div>
-              </>
-            )}
+            </>
+          )}
         </div>
-      </main>
+      </div>
     </div>
   );
 }
@@ -1512,7 +1767,7 @@ function ProfileGeneratorView({
   genLoading, genError, learnStatus, learnInProgress, generatorTab, setGeneratorTab,
   learnSource, setLearnSource, learnUploadName, setLearnUploadName, learnUploadFile, setLearnUploadFile, learnUploadSubmitted, setLearnUploadSubmitted, pendingUploadedPortfolioName, setPendingUploadedPortfolioName, uploadedDatasets, deleteSelectedPortfolio, learnK, setLearnK, learnProfiles, stopLearnProcess,
   catalog, catalogList, selectedCatalogVersion, setSelectedCatalogVersion, loadCatalog,
-  expandedProfile, setExpandedProfile,
+  expandedProfileId, setExpandedProfile,
   startOptimization, stopOptimization, deleteOptimization, deleteCatalog,
   optimizationState, optimizationStarting, optimizeInProgress, optimizationStopPhase, showOptimizationProgress,
   savedOptimizations, selectedSavedOptimizationId, loadSavedOptimization, fetchSavedOptimizations,
@@ -1567,7 +1822,7 @@ function ProfileGeneratorView({
     return (
       <>
         <span>{match[1]}</span>
-        <span className="text-slate-400">{match[2]}</span>
+        <span className="text-[#7a8680]">{match[2]}</span>
       </>
     );
   };
@@ -1576,7 +1831,7 @@ function ProfileGeneratorView({
       return (
         <>
           <span>{state?.current_step || state?.status || "Working"} </span>
-          <span className="text-slate-400">{state?.progress ?? 0}%</span>
+          <span className="text-[#7a8680]">{state?.progress ?? 0}%</span>
         </>
       );
     }
@@ -1600,7 +1855,7 @@ function ProfileGeneratorView({
         <span>
           {`Optimizing ${profileId || "profile"}${profilePos} · Iteration ${iter}/${iterMax} · ${phaseText} `}
         </span>
-        <span className="text-slate-400">{state.progress}%</span>
+        <span className="text-[#7a8680]">{state.progress}%</span>
       </>
     );
   };
@@ -1639,11 +1894,11 @@ function ProfileGeneratorView({
     return [{ optimization_id: selectedId, label: placeholderLabel }, ...base];
   }, [savedOptimizations, selectedSavedOptimizationId, optimizationState]);
   const getStepBadgeClass = (status: "pending" | "running" | "done" | "skipped" | "blocked") => {
-    if (status === "running") return "bg-blue-50 text-blue-700 border-blue-200";
-    if (status === "done") return "bg-emerald-50 text-emerald-700 border-emerald-200";
-    if (status === "skipped") return "bg-slate-50 text-slate-500 border-slate-200";
-    if (status === "blocked") return "bg-amber-50 text-amber-700 border-amber-200";
-    return "bg-slate-50 text-slate-500 border-slate-200";
+    if (status === "running") return "bg-[#5b9bff]/10 text-[#5b9bff] border-[#5b9bff]/30";
+    if (status === "done") return "bg-[#66ff99]/10 text-[#66ff99] border-[#66ff99]/30";
+    if (status === "skipped") return "bg-[#141a18] text-[#7a8680] border-[#2e3432]";
+    if (status === "blocked") return "bg-[#ffb347]/10 text-[#ffb347] border-[#ffb347]/30";
+    return "bg-[#141a18] text-[#7a8680] border-[#2e3432]";
   };
   const renderOptimizationDecisionSteps = (state: any) => {
     const status = String(state?.status || "");
@@ -1700,16 +1955,16 @@ function ProfileGeneratorView({
     ];
     if (!showDecisionSteps) return null;
     return (
-      <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
+      <div className="rounded-lg border border-[#2e3432] bg-[#0c0f0f] p-4 space-y-2">
         {steps.map((step) => (
-          <div key={step.name} className="rounded-md border border-slate-200 bg-white px-3 py-2">
+          <div key={step.name} className="rounded-md border border-[#2e3432] bg-[#0c0f0f] px-3 py-2">
             <div className="flex items-center justify-between gap-3">
-              <span className="text-sm font-medium text-slate-800">{step.name}</span>
-              <span className={cn("text-[11px] font-semibold uppercase tracking-wider rounded border px-2 py-0.5", getStepBadgeClass(step.status))}>
+              <span className="text-sm font-medium text-[#edf3ef]">{step.name}</span>
+              <span className={cn("text-[11px] font-semibold tracking-wider rounded border px-2 py-0.5", getStepBadgeClass(step.status))}>
                 {step.status}
               </span>
             </div>
-            <p className="mt-1 text-xs text-slate-500">{step.detail}</p>
+            <p className="mt-1 text-xs text-[#7a8680]">{step.detail}</p>
           </div>
         ))}
       </div>
@@ -1719,14 +1974,14 @@ function ProfileGeneratorView({
   return (
     <div className="space-y-6">
       {genError && (
-        <div className="rounded-md bg-red-50 p-4 text-red-700 border border-red-200 text-sm">
+        <div className="rounded-md bg-[#ff5d73]/10 p-4 text-[#ff5d73] border border-[#ff5d73]/30 text-sm">
           {genError}
         </div>
       )}
 
-      <div className="rounded-xl border border-[#E5E7EB] bg-white shadow-sm">
+      <div className="rounded-lg border border-[#2e3432] bg-[#0c0f0f]">
         {/* Tab Bar */}
-        <div className="flex border-b border-[#E5E7EB] px-2 pt-2 overflow-x-auto">
+        <div className="flex border-b border-[#2e3432] px-2 pt-2 overflow-x-auto">
           {tabs.map((t) => (
             <button
               key={t.key}
@@ -1735,8 +1990,8 @@ function ProfileGeneratorView({
               className={cn(
                 "px-5 py-3 text-sm border-b-2 -mb-px transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed",
                 generatorTab === t.key
-                  ? "border-black text-black font-bold"
-                  : "font-medium border-transparent text-slate-500 hover:text-slate-700"
+                  ? "border-[#66ff99] text-[#66ff99] font-bold"
+                  : "font-medium border-transparent text-[#7a8680] hover:text-[#b4c0b8]"
               )}
             >
               {t.label}
@@ -1749,13 +2004,13 @@ function ProfileGeneratorView({
           {generatorTab === "learn" && (
             <div className="space-y-6">
               <div>
-                <h3 className="text-lg font-semibold text-slate-900 mb-1">Learn Profiles</h3>
-                <p className="text-sm text-slate-500">Learn behavioral profiles from transaction data using K-Means clustering.</p>
+                <h3 className="text-lg font-semibold text-[#00aaff] mb-1">Learn Profiles</h3>
+                <p className="text-sm text-[#7a8680]">Learn behavioral profiles from transaction data using K-Means clustering.</p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">Portfolio</label>
+                  <label className="block text-sm font-medium text-[#b4c0b8] mb-2">Portfolio</label>
                   <div className="flex flex-wrap items-center gap-2">
                     <select
                       value={learnSource}
@@ -1771,7 +2026,7 @@ function ProfileGeneratorView({
                           setLearnUploadName("");
                         }
                       }}
-                      className="rounded-md border px-3 py-2 text-sm bg-white w-full"
+                      className="rounded-md border border-[#2e3432] px-3 py-2 text-sm bg-[#141a18] text-[#edf3ef] w-full"
                     >
                       {uploadedDatasets.map((d: any) => (
                         <option key={d.dataset_id} value={`uploaded-dataset:${d.dataset_id}`}>
@@ -1789,7 +2044,7 @@ function ProfileGeneratorView({
                       <button
                         onClick={deleteSelectedPortfolio}
                         disabled={isGeneratorLocked}
-                        className="rounded-md border border-red-200 p-2 text-red-500 hover:bg-red-50 hover:text-red-600 transition-colors"
+                        className="rounded-md border border-[#ff5d73]/30 p-2 text-[#ff5d73] hover:bg-[#ff5d73]/10 hover:text-[#ff5d73] transition-colors"
                         title="Delete selected portfolio and associated data"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -1798,8 +2053,8 @@ function ProfileGeneratorView({
                   </div>
 
                   <div className="mt-4">
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Number of Profiles (K): <span className="font-bold text-black">{learnK}</span>
+                    <label className="block text-sm font-medium text-[#b4c0b8] mb-2">
+                      Number of Profiles (K): <span className="font-bold text-[#66ff99]">{learnK}</span>
                     </label>
                     <input
                       type="range"
@@ -1809,14 +2064,14 @@ function ProfileGeneratorView({
                       value={learnK}
                       disabled={isGeneratorLocked}
                       onChange={(e) => setLearnK(parseInt(e.target.value))}
-                      className="w-full accent-black"
+                      className="w-full accent-[#66ff99]"
                     />
                     <datalist id="learn-k-ticks">
                       {Array.from({ length: 13 }, (_, i) => i + 3).map((k) => (
                         <option key={k} value={k} />
                       ))}
                     </datalist>
-                    <div className="flex justify-between text-xs text-slate-400 mt-1">
+                    <div className="flex justify-between text-xs text-[#7a8680] mt-1">
                       <span>3</span>
                       <span>15</span>
                     </div>
@@ -1827,23 +2082,23 @@ function ProfileGeneratorView({
                   {learnSource === "uploaded" && !learnUploadSubmitted && (
                     <>
                       <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">Portfolio Name</label>
+                        <label className="block text-sm font-medium text-[#b4c0b8] mb-2">Portfolio Name</label>
                         <input
                           type="text"
                           value={learnUploadName}
                           disabled={isGeneratorLocked}
                           onChange={(e) => setLearnUploadName(e.target.value)}
-                          className="rounded-md border px-3 py-2 text-sm bg-white w-full"
+                          className="rounded-md border border-[#2e3432] px-3 py-2 text-sm bg-[#141a18] text-[#edf3ef] w-full"
                           placeholder="e.g., Q1 2026 Retail Transactions"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">Transaction File</label>
-                        <label className="flex cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed border-slate-300 py-4 hover:border-blue-500 hover:bg-slate-50 transition-colors">
+                        <label className="block text-sm font-medium text-[#b4c0b8] mb-2">Transaction File</label>
+                        <label className="flex cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed border-[#3d4542] py-4 hover:border-[#66ff99] hover:bg-[#141a18] transition-colors">
                           <div className="text-center px-3">
-                            <Upload className="mx-auto h-5 w-5 text-slate-400 mb-1" />
-                            <span className="text-sm text-slate-600">Click or drag CSV here</span>
+                            <Upload className="mx-auto h-5 w-5 text-[#7a8680] mb-1" />
+                            <span className="text-sm text-[#b4c0b8]">Click or drag CSV here</span>
                           </div>
                           <input
                             type="file"
@@ -1854,7 +2109,7 @@ function ProfileGeneratorView({
                           />
                         </label>
                         {learnUploadFile && (
-                          <p className="mt-2 text-xs text-slate-500 truncate">{learnUploadFile.name}</p>
+                          <p className="mt-2 text-xs text-[#7a8680] truncate">{learnUploadFile.name}</p>
                         )}
                       </div>
                     </>
@@ -1868,7 +2123,7 @@ function ProfileGeneratorView({
                   disabled={!isLearnActive && isOptimizeActive}
                   aria-label="Submit"
                   title={isLearnActive ? "Stop" : "Submit"}
-                  className="rounded-full bg-black w-8 h-8 text-white hover:opacity-80 disabled:opacity-50 flex items-center justify-center"
+                  className="rounded-full bg-[#66ff99] w-8 h-8 text-black hover:opacity-80 disabled:opacity-50 flex items-center justify-center"
                 >
                   {isLearnActive
                     ? <Square className="h-3.5 w-3.5" />
@@ -1876,7 +2131,7 @@ function ProfileGeneratorView({
                   }
                 </button>
                 {isLearnActive && (
-                  <span className="text-sm text-slate-600 flex items-center gap-2">
+                  <span className="text-sm text-[#b4c0b8] flex items-center gap-2">
                     <img src="/linex-animated.svg" alt="Linex" className="h-5 w-5 shrink-0" />
                     <span>{renderLearnStatus(learnStatus || "Working...")}</span>
                   </span>
@@ -1890,8 +2145,8 @@ function ProfileGeneratorView({
             <div className="space-y-6">
               <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold text-slate-900 mb-1">Profile Catalog</h3>
-                  <p className="text-sm text-slate-500">Canonical behavioral profiles learned from data.</p>
+                  <h3 className="text-lg font-semibold text-[#00aaff] mb-1">Profile</h3>
+                  <p className="text-sm text-[#7a8680]">Behavioral profiles learned from data.</p>
                 </div>
                 {catalogList.length > 0 && (
                   <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
@@ -1899,7 +2154,7 @@ function ProfileGeneratorView({
                       value={selectedCatalogVersion}
                       disabled={isGeneratorLocked}
                       onChange={(e) => { setSelectedCatalogVersion(e.target.value); loadCatalog(e.target.value); }}
-                      className="rounded-md border px-3 py-2 text-sm bg-white w-full sm:w-auto"
+                      className="rounded-md border border-[#2e3432] px-3 py-2 text-sm bg-[#141a18] text-[#edf3ef] w-full sm:w-auto"
                     >
                       {catalogList.map((c: any) => (
                         <option key={c.version} value={c.version}>
@@ -1910,7 +2165,7 @@ function ProfileGeneratorView({
                     <button
                       onClick={() => selectedCatalogVersion && deleteCatalog(selectedCatalogVersion)}
                       disabled={isGeneratorLocked}
-                      className="rounded-md border border-red-200 p-2 text-red-500 hover:bg-red-50 hover:text-red-600 transition-colors"
+                      className="rounded-md border border-[#ff5d73]/30 p-2 text-[#ff5d73] hover:bg-[#ff5d73]/10 hover:text-[#ff5d73] transition-colors"
                       title="Delete this catalog"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -1921,16 +2176,16 @@ function ProfileGeneratorView({
 
               {catalog ? (
                 <div className="space-y-2">
-                  <div className="text-xs text-slate-400 mb-3">
+                  <div className="text-xs text-[#7a8680] mb-3">
                     Version: <span className="font-mono">{catalog.version}</span> · Source: {catalog.source} · K={catalog.k}
                     {catalog.total_learning_population > 0 && ` · ${catalog.total_learning_population.toLocaleString()} users`}
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-b border-slate-200 text-left text-slate-500">
+                        <tr className="border-b border-[#2e3432] text-left text-[#7a8680]">
                           <th className="py-2 pr-2 w-8"></th>
-                          <th className="py-2 pr-4 font-medium">Profile</th>
+                          <th className="py-2 pr-4 font-medium">Profile ID</th>
                           <th className="py-2 pr-4 font-medium">Description</th>
                           <th className="py-2 pr-4 font-medium text-right">Portfolio LTV</th>
                           <th className="py-2 pr-4 font-medium text-right">Population</th>
@@ -1940,11 +2195,11 @@ function ProfileGeneratorView({
                         {catalog.profiles.map((p: any) => (
                           <Fragment key={p.profile_id}>
                             <tr
-                              className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors"
-                              onClick={() => setExpandedProfile(expandedProfile === p.profile_id ? null : p.profile_id)}
+                              className="border-b border-[#2e3432] hover:bg-[#1a211e] cursor-pointer transition-colors"
+                              onClick={() => setExpandedProfile(expandedProfileId === p.profile_id ? null : p.profile_id)}
                             >
-                              <td className="py-2.5 pr-2 text-slate-400">
-                                {expandedProfile === p.profile_id
+                              <td className="py-2.5 pr-2 text-[#7a8680]">
+                                {expandedProfileId === p.profile_id
                                   ? <ChevronDown className="h-4 w-4" />
                                   : <ChevronRight className="h-4 w-4" />
                                 }
@@ -1952,33 +2207,33 @@ function ProfileGeneratorView({
                               <td className="py-2.5 pr-4">
                                 <div className="flex items-center gap-2.5">
                                   <span className={cn(
-                                    "inline-flex items-center justify-center rounded-full text-white text-xs font-bold w-8 h-8 shrink-0",
+                                    "inline-flex items-center justify-center rounded-full text-[#050607] text-xs font-bold w-8 h-8 shrink-0",
                                     p.description?.toLowerCase().includes("return-heavy")
                                       ? "bg-amber-600"
-                                      : "bg-slate-900"
+                                      : "bg-[#66ff99]"
                                   )}>
                                     {p.profile_id}
                                   </span>
                                   {p.label && (
-                                    <span className="text-xs font-semibold text-slate-500">{p.label}</span>
+                                    <span className="text-xs font-semibold text-[#7a8680]">{p.label}</span>
                                   )}
                                 </div>
                               </td>
-                              <td className="py-2.5 pr-4 text-slate-700">{p.description}</td>
-                              <td className="py-2.5 pr-4 text-right font-mono text-slate-600">
+                              <td className="py-2.5 pr-4 text-[#b4c0b8]">{p.description}</td>
+                              <td className="py-2.5 pr-4 text-right font-mono text-[#b4c0b8]">
                                 {p.portfolio_ltv != null ? `${p.portfolio_ltv < 0 ? '-' : ''}$${Math.abs(p.portfolio_ltv).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '—'}
                               </td>
-                              <td className="py-2.5 pr-4 text-right font-mono text-slate-600">
+                              <td className="py-2.5 pr-4 text-right font-mono text-[#b4c0b8]">
                                 {p.population_count > 0 ? p.population_count.toLocaleString() : ''}
-                                <span className="text-slate-400 ml-1">({(p.population_share * 100).toFixed(1)}%)</span>
+                                <span className="text-[#7a8680] ml-1">({(p.population_share * 100).toFixed(1)}%)</span>
                               </td>
                             </tr>
-                            {expandedProfile === p.profile_id && (
-                              <tr key={`${p.profile_id}-detail`} className="bg-slate-50">
+                            {expandedProfileId === p.profile_id && (
+                              <tr key={`${p.profile_id}-detail`} className="bg-[#141a18]">
                                 <td colSpan={5} className="p-4">
                                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                     <div>
-                                      <h4 className="text-xs font-semibold text-slate-500 mb-3 uppercase tracking-wide">Centroid</h4>
+                                      <h4 className="text-xs font-semibold text-[#00aaff] mb-3 tracking-wide">Centroid</h4>
                                       <div className="space-y-3">
                                         {BEHAVIORAL_AXES.map((ax) => {
                                           const primaryFeat = ax.features[0];
@@ -1987,11 +2242,11 @@ function ProfileGeneratorView({
                                           return (
                                             <div key={ax.axis}>
                                               <div className="flex items-center gap-2 text-xs mb-1">
-                                                <span className="w-40 truncate text-slate-800 font-bold">{ax.label}</span>
-                                                <div className="flex-1 bg-slate-200 rounded-full h-2 overflow-hidden">
-                                                  <div className="bg-slate-900 h-full rounded-full transition-all" style={{ width: `${Math.max(0, Math.min(primaryVal * 10, 100))}%` }} />
+                                                <span className="w-40 truncate text-[#edf3ef] font-bold">{ax.label}</span>
+                                                <div className="flex-1 bg-[#2e3432] rounded-full h-2 overflow-hidden">
+                                                  <div className="bg-[#66ff99] h-full rounded-full transition-all" style={{ width: `${Math.max(0, Math.min(primaryVal * 10, 100))}%` }} />
                                                 </div>
-                                                <span className="font-mono text-slate-700 w-10 text-right font-semibold">{primaryVal.toFixed(2)}</span>
+                                                <span className="font-mono text-[#b4c0b8] w-10 text-right font-semibold">{primaryVal.toFixed(2)}</span>
                                               </div>
                                               {auxFeatures.length > 0 && (
                                                 <div className="space-y-0.5 pl-3">
@@ -1999,11 +2254,11 @@ function ProfileGeneratorView({
                                                     const val = p.centroid[feat] ?? 0;
                                                     return (
                                                       <div key={feat} className="flex items-center gap-2 text-xs">
-                                                        <span className="w-[148px] truncate text-slate-400">{feat}</span>
-                                                        <div className="flex-1 bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                                                          <div className="bg-slate-400 h-full rounded-full transition-all" style={{ width: `${Math.max(0, Math.min(val * 10, 100))}%` }} />
+                                                        <span className="w-[148px] truncate text-[#7a8680]">{feat}</span>
+                                                        <div className="flex-1 bg-[#1a211e] rounded-full h-1.5 overflow-hidden">
+                                                          <div className="bg-[#7a8680] h-full rounded-full transition-all" style={{ width: `${Math.max(0, Math.min(val * 10, 100))}%` }} />
                                                         </div>
-                                                        <span className="font-mono text-slate-400 w-10 text-right">{val.toFixed(2)}</span>
+                                                        <span className="font-mono text-[#7a8680] w-10 text-right">{val.toFixed(2)}</span>
                                                       </div>
                                                     );
                                                   })}
@@ -2015,7 +2270,7 @@ function ProfileGeneratorView({
                                       </div>
                                     </div>
                                     <div>
-                                      <h4 className="text-xs font-semibold text-slate-500 mb-3 uppercase tracking-wide">Dispersion (σ)</h4>
+                                      <h4 className="text-xs font-semibold text-[#00aaff] mb-3 tracking-wide">Dispersion (σ)</h4>
                                       <div className="space-y-3">
                                         {BEHAVIORAL_AXES.map((ax) => {
                                           const primaryFeat = ax.features[0];
@@ -2024,8 +2279,8 @@ function ProfileGeneratorView({
                                           return (
                                             <div key={ax.axis}>
                                               <div className="flex items-center gap-2 text-xs mb-1">
-                                                <span className="w-40 truncate text-slate-800 font-bold">{ax.label}</span>
-                                                <span className="font-mono text-slate-700 font-semibold">{primaryVal.toFixed(3)}</span>
+                                                <span className="w-40 truncate text-[#edf3ef] font-bold">{ax.label}</span>
+                                                <span className="font-mono text-[#b4c0b8] font-semibold">{primaryVal.toFixed(3)}</span>
                                               </div>
                                               {auxFeatures.length > 0 && (
                                                 <div className="space-y-0.5 pl-3">
@@ -2033,8 +2288,8 @@ function ProfileGeneratorView({
                                                     const val = p.dispersion[feat] ?? 0;
                                                     return (
                                                       <div key={feat} className="flex items-center gap-2 text-xs">
-                                                        <span className="w-[148px] truncate text-slate-400">{feat}</span>
-                                                        <span className="font-mono text-slate-400">{val.toFixed(3)}</span>
+                                                        <span className="w-[148px] truncate text-[#7a8680]">{feat}</span>
+                                                        <span className="font-mono text-[#7a8680]">{val.toFixed(3)}</span>
                                                       </div>
                                                     );
                                                   })}
@@ -2052,12 +2307,12 @@ function ProfileGeneratorView({
                           </Fragment>
                         ))}
                         {/* Total Portfolio LTV Row */}
-                        <tr className="bg-slate-50/50">
+                        <tr className="bg-[#141a18]">
                           <td className="py-4 pr-2"></td>
                           <td className="py-4 pr-4" colSpan={2}>
-                            <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Total Portfolio LTV</span>
+                            <span className="text-[10px] tracking-wider text-[#7a8680] font-bold">Total Portfolio LTV</span>
                           </td>
-                          <td className="py-4 pr-4 text-right font-mono text-slate-900 font-bold border-t border-slate-200">
+                          <td className="py-4 pr-4 text-right font-mono text-[#edf3ef] font-bold border-t border-[#2e3432]">
                             {(() => {
                               const totalLTV = catalog.profiles.reduce((sum: number, p: any) => sum + (p.portfolio_ltv || 0), 0);
                               return `${totalLTV < 0 ? '-' : ''}$${Math.abs(totalLTV).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
@@ -2070,7 +2325,7 @@ function ProfileGeneratorView({
                   </div>
                 </div>
               ) : (
-                <div className="text-sm text-slate-500 py-8 text-center">
+                <div className="text-sm text-[#7a8680] py-8 text-center">
                   No catalog loaded. Learn profiles first or select a saved catalog.
                 </div>
               )}
@@ -2080,10 +2335,10 @@ function ProfileGeneratorView({
           {/* Optimize Panel */}
           {generatorTab === "optimize" && (
             <div className="space-y-6">
-              <h3 className="text-lg font-semibold text-slate-900">Portfolio Optimization</h3>
+              <h3 className="text-lg font-semibold text-[#00aaff]">Portfolio Optimization</h3>
               {catalogList.length > 0 && (
                 <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
-                  <label className="text-sm text-slate-500 shrink-0 sm:w-20 text-left">Profile</label>
+                  <label className="text-sm text-slate-500 shrink-0 sm:w-20 text-left">Profile ID</label>
                   <select
                     value={selectedCatalogVersion}
                     disabled={isGeneratorLocked}
@@ -2135,7 +2390,7 @@ function ProfileGeneratorView({
               {showIncentiveSetIncentives && (
                 <div className="rounded-lg border border-slate-200 bg-white">
                   <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                    <span className="text-xs font-semibold text-slate-500 tracking-wider">
                       {incentiveSetTitle} ({incentivesForDisplay.length})
                     </span>
                     {incentiveSetDetailLoading && (
@@ -2148,7 +2403,7 @@ function ProfileGeneratorView({
                     ) : (
                       <div className="flex flex-wrap gap-1.5">
                         {incentivesForDisplay.map((inc: any, idx: number) => (
-                          <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white border border-slate-200 text-[11px] text-slate-500 font-medium">
+                          <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white border border-slate-200 text-[11px] text-black font-medium">
                             {inc.name}
                             <span className="text-slate-300">
                               ${Math.round((inc.estimated_annual_cost_per_user || 0) * (inc.redemption_rate || 1))}
@@ -2195,7 +2450,7 @@ function ProfileGeneratorView({
 
                   {!selectedCatalogVersion && (
                     <div className="text-sm text-slate-500">
-                      No profile catalog selected yet.
+                      No profile selected yet.
                     </div>
                   )}
 
@@ -2275,13 +2530,13 @@ function ProfileGeneratorView({
                           {/* Results table — most important, shown first */}
                           <div>
                             <div className="flex items-center justify-between mb-4">
-                              <h4 className="mt-0 font-semibold text-slate-900">Optimal Incentive Program</h4>
+                              <h4 className="mt-0 font-semibold text-[#00aaff]">Optimal Incentive Program</h4>
                             </div>
                             <div className="overflow-x-auto">
                               <table className="w-full text-sm">
                                 <thead>
                                   <tr className="border-b border-slate-200 text-left text-slate-500">
-                                    <th className="py-2 pr-4 font-medium">Profile</th>
+                                    <th className="py-2 pr-4 font-medium">Profile ID</th>
                                     <th className="py-2 pr-4 font-medium">Assigned Incentive(s)</th>
                                     <th className="py-2 pr-4 font-medium text-right">Orig LTV</th>
                                     <th className="py-2 pr-4 font-medium text-right">Gross LTV</th>
@@ -2297,7 +2552,7 @@ function ProfileGeneratorView({
                                       <td className="py-3 pr-4 text-slate-700">
                                         <div className="flex flex-wrap gap-1">
                                           {(r.selected_incentives || []).map((inc: string, idx: number) => (
-                                            <span key={idx} className="inline-flex bg-amber-100 text-amber-800 px-2 py-0.5 rounded text-xs font-semibold">
+                                            <span key={idx} className="inline-flex bg-white text-black px-2 py-0.5 rounded text-xs font-semibold">
                                               {inc}
                                             </span>
                                           ))}
@@ -2322,7 +2577,7 @@ function ProfileGeneratorView({
                                   ))}
                                   <tr className="bg-slate-50/50">
                                     <td className="py-4 pr-4" colSpan={2}>
-                                      <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Maximized Total Portfolio</span>
+                                      <span className="text-[10px] tracking-wider text-slate-400 font-bold">Maximized Total Portfolio</span>
                                     </td>
                                     <td className="py-4 pr-4 text-right font-mono text-slate-900 font-bold border-t border-slate-200">
                                       {(() => {
@@ -2513,7 +2768,7 @@ export function ProfileAssignmentView({ assignment }: { assignment: any }) {
 
       {assignment.alternates && assignment.alternates.length > 0 && (
         <div>
-          <h4 className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">Alternate Candidates</h4>
+          <h4 className="text-xs font-semibold text-[#00aaff] mb-2 tracking-wide">Alternate Candidates</h4>
           <div className="flex flex-wrap gap-3">
             {assignment.alternates.map((alt: any, i: number) => (
               <div key={i} className="rounded-md border border-slate-200 px-3 py-2 text-sm">
@@ -2527,7 +2782,7 @@ export function ProfileAssignmentView({ assignment }: { assignment: any }) {
 
       {assignment.feature_vector && (
         <div>
-          <h4 className="text-xs font-semibold text-slate-500 mb-3 uppercase tracking-wide">Feature Vector (normalized)</h4>
+          <h4 className="text-xs font-semibold text-[#00aaff] mb-3 tracking-wide">Feature Vector (normalized)</h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {BEHAVIORAL_AXES.map((ax) => {
               const primaryFeat = ax.features[0];
