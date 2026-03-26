@@ -104,12 +104,12 @@ export default function NavRail({ view, setView }: NavRailProps) {
             fontSize: 14,
             position: "relative",
             background:
-              view === it.id ? "rgba(113,124,119,0.24)" : "transparent",
+              (view === it.id || (it.id === "welcome" && view === "generator")) ? "rgba(113,124,119,0.24)" : "transparent",
             border:
-              view === it.id
+              (view === it.id || (it.id === "welcome" && view === "generator"))
                 ? `1px solid ${C.accent}55`
                 : "1px solid transparent",
-            color: view === it.id ? C.text : C.muted,
+            color: (view === it.id || (it.id === "welcome" && view === "generator")) ? C.text : C.muted,
           }}
         >
           {it.icon}

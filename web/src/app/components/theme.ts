@@ -12,7 +12,7 @@ export const C = {
   textSec: "#b4c0b8",
   muted: "#7a8680",
   accent: "#66ff99",
-  accentDim: "#2f9a67",
+  accentDim: "#3bb266",
   accentBg: "rgba(102,255,153,0.06)",
   danger: "#ff5d73",
   blue: "#5b9bff",
@@ -31,7 +31,7 @@ export const PRIMARY_FEATURES = new Set(BEHAVIORAL_AXES.map(a => a.features[0]))
 
 export type View = "welcome" | "profiler" | "generator" | "workflow" | "dataroom";
 export type ProfilerTab = "test" | "upload";
-export type GeneratorTab = "learn" | "catalog" | "optimize";
+export type GeneratorTab = "learn" | "optimize";
 
 export const DEFAULT_LOCAL_API_BASE_URL = "http://127.0.0.1:5050/linexone-dev/us-central1";
 export const CLOUD_FUNCTION_URL = (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_API_BASE_URL?.trim())

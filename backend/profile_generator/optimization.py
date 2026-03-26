@@ -174,7 +174,8 @@ Task:
                 contents=user_prompt,
                 config=types.GenerateContentConfig(
                     system_instruction=system_prompt,
-                    temperature=0.4,
+                    temperature=0.0,
+                    seed=42,
                     response_mime_type="application/json",
                 ),
             )

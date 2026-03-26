@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, Fragment, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Papa from "papaparse";
-import { Upload, FileText, Search, Activity, Loader2, Users, Boxes, ChevronDown, ChevronRight, Square, Trash2, ArrowUp, MoveHorizontal } from "lucide-react";
+import { Upload, FileText, Search, Activity, Loader2, Users, Boxes, ChevronRight, Square, Trash2, ArrowUp, MoveHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import NavRail from "./components/NavRail";
 import WelcomeCanvas from "./components/WelcomeCanvas";
@@ -74,7 +74,6 @@ export default function Home() {
   const [catalog, setCatalog] = useState<any>(null);
   const [catalogList, setCatalogList] = useState<any[]>([]);
   const [selectedCatalogVersion, setSelectedCatalogVersion] = useState("");
-  const [expandedProfileId, setExpandedProfile] = useState<string | null>(null);
 
   // Optimization State
   const [optimizationId, setOptimizationId] = useState<string | null>(null);
@@ -569,7 +568,7 @@ export default function Home() {
       }
       setLearnStatus("Learn complete.");
       setSelectedCatalogVersion(data.version);
-      setGeneratorTab("catalog");
+      setGeneratorTab("optimize");
       fetchCatalogList();
       fetchUploadedDatasets();
     } catch (err: any) {
@@ -782,7 +781,6 @@ export default function Home() {
       fetchSavedOptimizations(selectedCatalogVersion || undefined);
       fetchIncentiveSets();
     } else if (activeView === "generator") {
-      if (generatorTab === "catalog") loadCatalog(selectedCatalogVersion || undefined);
       if (generatorTab === "optimize") fetchSavedOptimizations(selectedCatalogVersion || undefined);
       fetchIncentiveSets();
     }
@@ -1828,14 +1826,14 @@ export default function Home() {
                     setActiveView("profiler");
                     setProfilerTab("test");
                   } else if (t.cat === "Profile Generator") {
-                    setActiveView("generator");
-                    setGeneratorTab("catalog");
+                    setActiveView("welcome");
+                    setGeneratorTab("optimize");
                   }
                 }}
               />
             )}
 
-            {activeView === "dataroom" && <DataroomCanvas />}
+            {activeView === "dataroom" && <DataroomCanvas datasets={uploadedDatasets} />}
 
             {activeView === "profiler" && (
               <div className="p-3 md:p-4">
@@ -1995,7 +1993,7 @@ export default function Home() {
             )}
 
             {(activeView === "welcome" || activeView === "generator") && (
-              <div className="p-3 md:p-4">
+              <div style={{ padding: "28px 24px 18px" }}>
                 <div className="mx-auto max-w-6xl space-y-6">
                   {activeView === "generator" && genError && (
                     <div className="rounded-md bg-red-50 p-4 text-red-700 border border-red-200">
@@ -2031,8 +2029,6 @@ export default function Home() {
                 selectedCatalogVersion={selectedCatalogVersion}
                 setSelectedCatalogVersion={setSelectedCatalogVersion}
                 loadCatalog={loadCatalog}
-                expandedProfileId={expandedProfileId}
-                setExpandedProfile={setExpandedProfile}
                 startOptimization={startOptimization}
                 stopOptimization={stopOptimization}
                 deleteOptimization={deleteOptimization}
@@ -2057,7 +2053,7 @@ export default function Home() {
               }
 
               {/* Most Recent Optimal Incentive Program */}
-              <div className="mt-8 space-y-4">
+              <div className="space-y-4">
                   <h3 className="text-xs font-bold tracking-wider" style={{ color: "#00aaff" }}>Optimize Portfolio</h3>
 
                   {/* Context dropdowns */}
@@ -2155,7 +2151,7 @@ export default function Home() {
                                           <div className="flex items-center gap-2">
                                             <span className={cn(
                                               "inline-flex items-center justify-center rounded-full text-white text-[10px] font-bold w-6 h-6 shrink-0",
-                                              p.description?.toLowerCase().includes("return-heavy") ? "bg-amber-600" : "bg-[#2f9a67]"
+                                              p.description?.toLowerCase().includes("return-heavy") ? "bg-amber-600" : "bg-[#3bb266]"
                                             )}>
                                               {p.profile_id}
                                             </span>
@@ -2367,7 +2363,7 @@ export default function Home() {
                         {agentChatMessages.length === 0 ? (
                           <div className="mb-0.5 flex items-center gap-2.5">
                             <img src="/linex-icon.svg" alt="Agent" className="h-[14px] w-[14px] shrink-0" />
-                            <h2 className="text-sm leading-tight text-[#2f9a67]">
+                            <h2 className="text-sm leading-tight text-[#3bb266]">
                               {typedWelcomeLine}
                             </h2>
                           </div>
@@ -2388,13 +2384,13 @@ export default function Home() {
                                           </clipPath>
                                         </defs>
                                         <g clipPath="url(#optProgressClip)">
-                                          <path d="M11.2383 44H0L2.93359 40H14.1729L11.2383 44ZM17.1074 36H5.86816L8.80273 32H20.042L17.1074 36ZM22.9756 28H11.7363L14.6709 24H25.9102L22.9756 28ZM28.8447 20H17.6055L20.54 16H31.7793L28.8447 20ZM34.7139 12H23.4746L26.4092 8H37.6484L34.7139 12ZM40.583 4H29.3438L32.2783 0H43.5176L40.583 4Z" fill="#2f9a67"/>
-                                          <path d="M42.3877 44H30.9336L28.1143 40H39.5693L42.3877 44ZM36.75 36H25.2949L22.4756 32H33.9307L36.75 36ZM31.1113 28H22.9756L25.9102 24H28.292L31.1113 28ZM17.6055 20H14.0176L11.1982 16H20.54L17.6055 20ZM19.835 12H8.37988L5.56055 8H17.0156L19.835 12ZM14.1963 4H2.74121L0.264648 0.486328H11.7197L14.1963 4Z" fill="#2f9a67"/>
+                                          <path d="M11.2383 44H0L2.93359 40H14.1729L11.2383 44ZM17.1074 36H5.86816L8.80273 32H20.042L17.1074 36ZM22.9756 28H11.7363L14.6709 24H25.9102L22.9756 28ZM28.8447 20H17.6055L20.54 16H31.7793L28.8447 20ZM34.7139 12H23.4746L26.4092 8H37.6484L34.7139 12ZM40.583 4H29.3438L32.2783 0H43.5176L40.583 4Z" fill="#3bb266"/>
+                                          <path d="M42.3877 44H30.9336L28.1143 40H39.5693L42.3877 44ZM36.75 36H25.2949L22.4756 32H33.9307L36.75 36ZM31.1113 28H22.9756L25.9102 24H28.292L31.1113 28ZM17.6055 20H14.0176L11.1982 16H20.54L17.6055 20ZM19.835 12H8.37988L5.56055 8H17.0156L19.835 12ZM14.1963 4H2.74121L0.264648 0.486328H11.7197L14.1963 4Z" fill="#3bb266"/>
                                         </g>
                                       </svg>
                                     </div>
                                   )}
-                                  <p className={`text-sm break-words whitespace-pre-wrap ${message.role === "user" ? "text-[#2f9a67]" : "text-[#9ca3af]"}`}>{message.text}</p>
+                                  <p className={`text-sm break-words whitespace-pre-wrap ${message.role === "user" ? "text-[#3bb266]" : "text-[#9ca3af]"}`}>{message.text}</p>
                                 </div>
                                 {message.id !== "opt-progress" && <p className="mt-1 whitespace-nowrap text-[10px] text-[#6f7782]">{message.submittedAt}</p>}
                               </div>
@@ -2411,8 +2407,8 @@ export default function Home() {
                                       </clipPath>
                                     </defs>
                                     <g clipPath="url(#agentDrawClip)">
-                                      <path d="M11.2383 44H0L2.93359 40H14.1729L11.2383 44ZM17.1074 36H5.86816L8.80273 32H20.042L17.1074 36ZM22.9756 28H11.7363L14.6709 24H25.9102L22.9756 28ZM28.8447 20H17.6055L20.54 16H31.7793L28.8447 20ZM34.7139 12H23.4746L26.4092 8H37.6484L34.7139 12ZM40.583 4H29.3438L32.2783 0H43.5176L40.583 4Z" fill="#2f9a67"/>
-                                      <path d="M42.3877 44H30.9336L28.1143 40H39.5693L42.3877 44ZM36.75 36H25.2949L22.4756 32H33.9307L36.75 36ZM31.1113 28H22.9756L25.9102 24H28.292L31.1113 28ZM17.6055 20H14.0176L11.1982 16H20.54L17.6055 20ZM19.835 12H8.37988L5.56055 8H17.0156L19.835 12ZM14.1963 4H2.74121L0.264648 0.486328H11.7197L14.1963 4Z" fill="#2f9a67"/>
+                                      <path d="M11.2383 44H0L2.93359 40H14.1729L11.2383 44ZM17.1074 36H5.86816L8.80273 32H20.042L17.1074 36ZM22.9756 28H11.7363L14.6709 24H25.9102L22.9756 28ZM28.8447 20H17.6055L20.54 16H31.7793L28.8447 20ZM34.7139 12H23.4746L26.4092 8H37.6484L34.7139 12ZM40.583 4H29.3438L32.2783 0H43.5176L40.583 4Z" fill="#3bb266"/>
+                                      <path d="M42.3877 44H30.9336L28.1143 40H39.5693L42.3877 44ZM36.75 36H25.2949L22.4756 32H33.9307L36.75 36ZM31.1113 28H22.9756L25.9102 24H28.292L31.1113 28ZM17.6055 20H14.0176L11.1982 16H20.54L17.6055 20ZM19.835 12H8.37988L5.56055 8H17.0156L19.835 12ZM14.1963 4H2.74121L0.264648 0.486328H11.7197L14.1963 4Z" fill="#3bb266"/>
                                     </g>
                                   </svg>
                                 </div>
@@ -2433,7 +2429,7 @@ export default function Home() {
                           onChange={(e) => setAgentChatDraft(e.target.value)}
                           onKeyDown={handleAgentChatKeyDown}
                           placeholder="Ask Agent..."
-                          className="terminal-block-caret min-h-[88px] w-full resize-none border border-[#5f6670] bg-transparent pl-[calc(0.75rem+2ch)] pr-20 py-2 text-sm leading-[1.3] text-[#2f9a67] placeholder:text-[#2f9a67]/80 focus:outline-none"
+                          className="terminal-block-caret min-h-[88px] w-full resize-none border-0 border-t border-[#167516] bg-transparent pl-[calc(0.75rem+2ch)] pr-20 py-2 text-sm leading-[1.3] text-[#3bb266] placeholder:text-[#3bb266]/80 focus:outline-none"
                         />
                           {(optimizeInProgress || learnInProgress) ? (
                             <button
@@ -2491,7 +2487,6 @@ function ProfileGeneratorView({
   genLoading, genError, learnStatus, learnInProgress, generatorTab, setGeneratorTab,
   learnSource, setLearnSource, learnUploadName, setLearnUploadName, learnUploadFile, setLearnUploadFile, learnUploadSubmitted, setLearnUploadSubmitted, pendingUploadedPortfolioName, setPendingUploadedPortfolioName, uploadedDatasets, deleteSelectedPortfolio, learnK, setLearnK, learnProfiles, stopLearnProcess,
   catalog, catalogList, selectedCatalogVersion, setSelectedCatalogVersion, loadCatalog,
-  expandedProfileId, setExpandedProfile,
   startOptimization, stopOptimization, deleteOptimization, deleteCatalog,
   optimizationState, optimizationStarting, optimizeInProgress, optimizationStopPhase, showOptimizationProgress,
   savedOptimizations, selectedSavedOptimizationId, loadSavedOptimization, fetchSavedOptimizations,
@@ -2537,7 +2532,6 @@ function ProfileGeneratorView({
   };
   const tabs: { key: string; label: string }[] = [
     { key: "learn", label: "Learn" },
-    { key: "catalog", label: "Catalog" },
     { key: "optimize", label: "Optimize" },
   ];
   const renderLearnStatus = (status: string) => {
@@ -2862,198 +2856,6 @@ function ProfileGeneratorView({
                   </span>
                 )}
               </div>
-            </div>
-          )}
-
-          {/* Catalog Panel */}
-          {generatorTab === "catalog" && (
-            <div className="space-y-6">
-              <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold text-[#00aaff] mb-1">Profile</h3>
-                  <p className="text-sm text-[#7a8680]">Behavioral profiles learned from data.</p>
-                </div>
-                {catalogList.length > 0 && (
-                  <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-                    <select
-                      value={selectedCatalogVersion}
-                      disabled={isGeneratorLocked}
-                      onChange={(e) => { setSelectedCatalogVersion(e.target.value); loadCatalog(e.target.value); }}
-                      className="rounded-md border border-[#2e3432] px-3 py-2 text-sm bg-[#141a18] text-[#edf3ef] w-full sm:w-auto"
-                    >
-                      {catalogList.map((c: any) => (
-                        <option key={c.version} value={c.version}>
-                          {c.version} ({c.profile_count} profiles)
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      onClick={() => selectedCatalogVersion && deleteCatalog(selectedCatalogVersion)}
-                      disabled={isGeneratorLocked}
-                      className="rounded-md border border-[#ff5d73]/30 p-2 text-[#ff5d73] hover:bg-[#ff5d73]/10 hover:text-[#ff5d73] transition-colors"
-                      title="Delete this catalog"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {catalog ? (
-                <div className="space-y-2">
-                  <div className="text-xs text-[#7a8680] mb-3">
-                    Version: <span className="font-mono">{catalog.version}</span> · Source: {catalog.source} · K={catalog.k}
-                    {catalog.total_learning_population > 0 && ` · ${catalog.total_learning_population.toLocaleString()} users`}
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-[#2e3432] text-left text-[#7a8680]">
-                          <th className="py-2 pr-2 w-8"></th>
-                          <th className="py-2 pr-4 font-medium">Profile ID</th>
-                          <th className="py-2 pr-4 font-medium">Description</th>
-                          <th className="py-2 pr-4 font-medium text-right">Portfolio LTV</th>
-                          <th className="py-2 pr-4 font-medium text-right">Population</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {catalog.profiles.map((p: any) => (
-                          <Fragment key={p.profile_id}>
-                            <tr
-                              className="border-b border-[#2e3432] hover:bg-[#1a211e] cursor-pointer transition-colors"
-                              onClick={() => setExpandedProfile(expandedProfileId === p.profile_id ? null : p.profile_id)}
-                            >
-                              <td className="py-2.5 pr-2 text-[#7a8680]">
-                                {expandedProfileId === p.profile_id
-                                  ? <ChevronDown className="h-4 w-4" />
-                                  : <ChevronRight className="h-4 w-4" />
-                                }
-                              </td>
-                              <td className="py-2.5 pr-4">
-                                <div className="flex items-center gap-2.5">
-                                  <span className={cn(
-                                    "inline-flex items-center justify-center rounded-full text-[#050607] text-xs font-bold w-8 h-8 shrink-0",
-                                    p.description?.toLowerCase().includes("return-heavy")
-                                      ? "bg-amber-600"
-                                      : "bg-[#66ff99]"
-                                  )}>
-                                    {p.profile_id}
-                                  </span>
-                                  {p.label && (
-                                    <span className="text-xs font-semibold text-[#7a8680]">{p.label}</span>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="py-2.5 pr-4 text-[#b4c0b8]">{p.description}</td>
-                              <td className="py-2.5 pr-4 text-right font-mono text-[#b4c0b8]">
-                                {p.portfolio_ltv != null ? `${p.portfolio_ltv < 0 ? '-' : ''}$${Math.abs(p.portfolio_ltv).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '—'}
-                              </td>
-                              <td className="py-2.5 pr-4 text-right font-mono text-[#b4c0b8]">
-                                {p.population_count > 0 ? p.population_count.toLocaleString() : ''}
-                                <span className="text-[#7a8680] ml-1">({(p.population_share * 100).toFixed(1)}%)</span>
-                              </td>
-                            </tr>
-                            {expandedProfileId === p.profile_id && (
-                              <tr key={`${p.profile_id}-detail`} className="bg-[#141a18]">
-                                <td colSpan={5} className="p-4">
-                                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                    <div>
-                                      <h4 className="text-xs font-semibold text-[#00aaff] mb-3 tracking-wide">Centroid</h4>
-                                      <div className="space-y-3">
-                                        {BEHAVIORAL_AXES.map((ax) => {
-                                          const primaryFeat = ax.features[0];
-                                          const primaryVal = p.centroid[primaryFeat] ?? 0;
-                                          const auxFeatures = ax.features.slice(1).filter(f => f in p.centroid);
-                                          return (
-                                            <div key={ax.axis}>
-                                              <div className="flex items-center gap-2 text-xs mb-1">
-                                                <span className="w-40 truncate text-[#edf3ef] font-bold">{ax.label}</span>
-                                                <div className="flex-1 bg-[#2e3432] rounded-full h-2 overflow-hidden">
-                                                  <div className="bg-[#66ff99] h-full rounded-full transition-all" style={{ width: `${Math.max(0, Math.min(primaryVal * 10, 100))}%` }} />
-                                                </div>
-                                                <span className="font-mono text-[#b4c0b8] w-10 text-right font-semibold">{primaryVal.toFixed(2)}</span>
-                                              </div>
-                                              {auxFeatures.length > 0 && (
-                                                <div className="space-y-0.5 pl-3">
-                                                  {auxFeatures.map((feat) => {
-                                                    const val = p.centroid[feat] ?? 0;
-                                                    return (
-                                                      <div key={feat} className="flex items-center gap-2 text-xs">
-                                                        <span className="w-[148px] truncate text-[#7a8680]">{feat}</span>
-                                                        <div className="flex-1 bg-[#1a211e] rounded-full h-1.5 overflow-hidden">
-                                                          <div className="bg-[#7a8680] h-full rounded-full transition-all" style={{ width: `${Math.max(0, Math.min(val * 10, 100))}%` }} />
-                                                        </div>
-                                                        <span className="font-mono text-[#7a8680] w-10 text-right">{val.toFixed(2)}</span>
-                                                      </div>
-                                                    );
-                                                  })}
-                                                </div>
-                                              )}
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <h4 className="text-xs font-semibold text-[#00aaff] mb-3 tracking-wide">Dispersion (σ)</h4>
-                                      <div className="space-y-3">
-                                        {BEHAVIORAL_AXES.map((ax) => {
-                                          const primaryFeat = ax.features[0];
-                                          const primaryVal = p.dispersion[primaryFeat] ?? 0;
-                                          const auxFeatures = ax.features.slice(1).filter(f => f in p.dispersion);
-                                          return (
-                                            <div key={ax.axis}>
-                                              <div className="flex items-center gap-2 text-xs mb-1">
-                                                <span className="w-40 truncate text-[#edf3ef] font-bold">{ax.label}</span>
-                                                <span className="font-mono text-[#b4c0b8] font-semibold">{primaryVal.toFixed(3)}</span>
-                                              </div>
-                                              {auxFeatures.length > 0 && (
-                                                <div className="space-y-0.5 pl-3">
-                                                  {auxFeatures.map((feat) => {
-                                                    const val = p.dispersion[feat] ?? 0;
-                                                    return (
-                                                      <div key={feat} className="flex items-center gap-2 text-xs">
-                                                        <span className="w-[148px] truncate text-[#7a8680]">{feat}</span>
-                                                        <span className="font-mono text-[#7a8680]">{val.toFixed(3)}</span>
-                                                      </div>
-                                                    );
-                                                  })}
-                                                </div>
-                                              )}
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                    </div>
-                                  </div>
-                                </td>
-                              </tr>
-                            )}
-                          </Fragment>
-                        ))}
-                        {/* Total Portfolio LTV Row */}
-                        <tr className="bg-[#141a18]">
-                          <td className="py-4 pr-2"></td>
-                          <td className="py-4 pr-4" colSpan={2}>
-                            <span className="text-[10px] tracking-wider text-[#7a8680] font-bold">Total Portfolio LTV</span>
-                          </td>
-                          <td className="py-4 pr-4 text-right font-mono text-[#edf3ef] font-bold border-t border-[#2e3432]">
-                            {(() => {
-                              const totalLTV = catalog.profiles.reduce((sum: number, p: any) => sum + (p.portfolio_ltv || 0), 0);
-                              return `${totalLTV < 0 ? '-' : ''}$${Math.abs(totalLTV).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-                            })()}
-                          </td>
-                          <td className="py-4 pr-4"></td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-sm text-[#7a8680] py-8 text-center">
-                  No catalog loaded. Learn profiles first or select a saved catalog.
-                </div>
-              )}
             </div>
           )}
 
