@@ -153,12 +153,12 @@ export default function Home() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wf.activeWorkflow, activeView]);
 
+  const { loadIncentiveSetDetail, selectedIncentiveSetVersion: selectedISV } = incentives;
   useEffect(() => {
     if (activeView === "welcome" || (activeView === "generator" && generatorTab === "optimize")) {
-      incentives.loadIncentiveSetDetail(incentives.selectedIncentiveSetVersion || undefined);
+      loadIncentiveSetDetail(selectedISV || undefined);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeView, generatorTab, incentives.selectedIncentiveSetVersion]);
+  }, [activeView, generatorTab, selectedISV, loadIncentiveSetDetail]);
 
   // Optimization polling
   useEffect(() => {
@@ -255,24 +255,29 @@ export default function Home() {
   }, [optimization.optimizationId, optimization.optimizationPolling, learn.selectedCatalogVersion, optimization.updateOptimizationCache]);
 
   // Restore optimization cache from localStorage when switching tabs
+  const {
+    optimizeInProgress, optimizationId, optimizationState,
+    optimizationLatestByCatalogRef, optimizationCacheRef,
+    setSelectedSavedOptimizationId, setOptimizationState, setOptimizationId, setOptimizeInProgress,
+  } = optimization;
+  const { selectedCatalogVersion } = learn;
   useEffect(() => {
     if (activeView === "welcome") {
-      if (!learn.selectedCatalogVersion) return;
+      if (!selectedCatalogVersion) return;
     } else if (activeView === "generator") {
-      if (generatorTab !== "optimize" || !learn.selectedCatalogVersion) return;
+      if (generatorTab !== "optimize" || !selectedCatalogVersion) return;
     } else { return; }
-    if (optimization.optimizeInProgress && optimization.optimizationId) return;
-    const cachedOptimizationId = optimization.optimizationLatestByCatalogRef.current[learn.selectedCatalogVersion];
+    if (optimizeInProgress && optimizationId) return;
+    const cachedOptimizationId = optimizationLatestByCatalogRef.current[selectedCatalogVersion];
     if (!cachedOptimizationId) return;
-    const cachedState = optimization.optimizationCacheRef.current[cachedOptimizationId];
+    const cachedState = optimizationCacheRef.current[cachedOptimizationId];
     if (!cachedState) return;
-    if (optimization.optimizationState && optimization.optimizationState.catalog_version === learn.selectedCatalogVersion) return;
-    optimization.setSelectedSavedOptimizationId(cachedOptimizationId);
-    optimization.setOptimizationState(cachedState);
-    optimization.setOptimizationId(cachedOptimizationId);
-    optimization.setOptimizeInProgress(cachedState?.status === "running");
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeView, generatorTab, optimization.optimizeInProgress, optimization.optimizationId, optimization.optimizationState, learn.selectedCatalogVersion]);
+    if (optimizationState && optimizationState.catalog_version === selectedCatalogVersion) return;
+    setSelectedSavedOptimizationId(cachedOptimizationId);
+    setOptimizationState(cachedState);
+    setOptimizationId(cachedOptimizationId);
+    setOptimizeInProgress(cachedState?.status === "running");
+  }, [activeView, generatorTab, optimizeInProgress, optimizationId, optimizationState, selectedCatalogVersion, optimizationLatestByCatalogRef, optimizationCacheRef, setSelectedSavedOptimizationId, setOptimizationState, setOptimizationId, setOptimizeInProgress]);
 
   useEffect(() => {
     if ((activeView === "generator" || activeView === "welcome") && learn.selectedCatalogVersion) {
