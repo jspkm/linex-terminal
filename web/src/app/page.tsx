@@ -618,8 +618,8 @@ export default function Home() {
                                 </tr>
                               </thead>
                               <tbody>
-                                {optimization.optimizationState.results.map((r: ApiRecord) => (
-                                  <tr key={r.profile_id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                                {optimization.optimizationState.results.map((r: ApiRecord, idx: number) => (
+                                  <tr key={`${r.profile_id}-${idx}`} style={{ borderBottom: `1px solid ${C.border}` }}>
                                     <td className="py-3 pr-4 font-semibold" style={{ color: C.text }}>{r.profile_id}</td>
                                     <td className="py-3 pr-4">
                                       <div className="flex flex-wrap gap-1">
