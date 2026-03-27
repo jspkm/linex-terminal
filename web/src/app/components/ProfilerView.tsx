@@ -118,7 +118,7 @@ export function ProfileAssignmentView({ assignment }: { assignment: ApiRecord })
                         const val = assignment.feature_vector[feat] ?? 0;
                         return (
                           <div key={feat} className="flex items-center gap-2 text-xs">
-                            <span className="w-[148px] truncate text-slate-400">{feat}</span>
+                            <span className="w-37 truncate text-slate-400">{feat}</span>
                             <div className="flex-1 bg-slate-100 rounded-full h-1 overflow-hidden">
                               <div className="bg-blue-300 h-full rounded-full transition-all" style={{ width: `${Math.max(0, Math.min(val * 10, 100))}%` }} />
                             </div>
@@ -157,7 +157,7 @@ export default function ProfilerView(props: ProfilerViewProps) {
         )}
 
         <div className="space-y-6">
-          <div className="rounded-xl border border-[#E5E7EB] bg-white shadow-sm flex flex-col min-h-[260px]">
+          <div className="rounded-xl border border-[#E5E7EB] bg-white shadow-sm flex flex-col min-h-65">
             <div className="flex border-b border-[#E5E7EB] px-2 pt-2">
               <button
                 onClick={() => setProfilerTab("test")}
@@ -201,7 +201,7 @@ export default function ProfilerView(props: ProfilerViewProps) {
                         <select
                           value={selectedUserId}
                           onChange={(e) => setSelectedUserId(e.target.value)}
-                          className="rounded-md border px-3 py-2 text-sm bg-white min-w-[200px]"
+                          className="rounded-md border px-3 py-2 text-sm bg-white min-w-50"
                         >
                           {testUserIds.map((id) => (
                             <option key={id} value={id}>User {id}</option>

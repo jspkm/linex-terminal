@@ -448,7 +448,7 @@ export default function ProfileGeneratorView({
                     value={selectedCatalogVersion}
                     disabled={isGeneratorLocked}
                     onChange={(e) => { setSelectedCatalogVersion(e.target.value); fetchSavedOptimizations(e.target.value); }}
-                    className="rounded-md border px-3 py-2 text-sm bg-white w-full sm:max-w-[640px]"
+                    className="rounded-md border px-3 py-2 text-sm bg-white w-full sm:max-w-160"
                   >
                     {catalogList.map((c: ApiRecord) => (
                       <option key={c.version} value={c.version}>
@@ -474,7 +474,7 @@ export default function ProfileGeneratorView({
                     value={selectedIncentiveSetVersion || ""}
                     disabled={isGeneratorLocked}
                     onChange={(e) => setSelectedIncentiveSetVersion(e.target.value)}
-                    className="rounded-md border px-3 py-2 text-sm bg-white w-full sm:max-w-[640px]"
+                    className="rounded-md border px-3 py-2 text-sm bg-white w-full sm:max-w-160"
                   >
                     {incentiveSets.map((s: ApiRecord) => (
                       <option key={s.version} value={s.version}>
@@ -530,7 +530,7 @@ export default function ProfileGeneratorView({
                     onChange={(e) => {
                       if (e.target.value) loadSavedOptimization(e.target.value);
                     }}
-                    className="rounded-md border px-3 py-2 text-sm bg-white w-full sm:max-w-[640px]"
+                    className="rounded-md border px-3 py-2 text-sm bg-white w-full sm:max-w-160"
                   >
                     {programOptions.map((program) => (
                       <option key={program.optimization_id} value={program.optimization_id}>
@@ -593,7 +593,7 @@ export default function ProfileGeneratorView({
                       </button>
                     )}
                     {showOptimizeStatusMessage && (
-                      <div className="min-w-0 basis-full sm:flex-1 sm:basis-auto max-w-full sm:max-w-[520px] flex items-center gap-2">
+                      <div className="min-w-0 basis-full sm:flex-1 sm:basis-auto max-w-full sm:max-w-130 flex items-center gap-2">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src="/linex-animated.svg" alt="Linex" className="h-5 w-5 shrink-0" />
                         <div className="min-w-0 text-sm text-slate-700 truncate">

@@ -74,7 +74,7 @@ export default function AgentChatPanel({
                           </svg>
                         </div>
                       )}
-                      <p className={`text-sm break-words whitespace-pre-wrap ${message.role === "user" ? "text-[#3bb266]" : "text-[#9ca3af]"}`}>{message.text}</p>
+                      <p className={`text-sm wrap-break-words whitespace-pre-wrap ${message.role === "user" ? "text-[#3bb266]" : "text-[#9ca3af]"}`}>{message.text}</p>
                     </div>
                     {message.id !== "opt-progress" && <p className="mt-1 whitespace-nowrap text-[10px] text-[#6f7782]">{message.submittedAt}</p>}
                   </div>
@@ -112,8 +112,8 @@ export default function AgentChatPanel({
                 value={agentChatDraft}
                 onChange={(e) => setAgentChatDraft(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask Agent..."
-                className="terminal-block-caret min-h-[88px] w-full resize-none border-0 border-t border-[#167516] bg-transparent pl-[calc(0.75rem+2ch)] pr-20 py-2 text-sm leading-[1.3] text-[#3bb266] placeholder:text-[#3bb266]/80 focus:outline-none"
+                placeholder={agentChatMessages.length > 0 ? "Reply..." : "Ask the Agent..."}
+                className="terminal-block-caret min-h-22 w-full resize-none border-0 border-t border-[#167516] bg-transparent pl-[calc(0.75rem+2ch)] pr-20 py-2 text-sm leading-[1.3] text-[#3bb266] placeholder:text-[#3bb266]/80 focus:outline-none"
               />
               {(optimizeInProgress || learnInProgress) ? (
                 <button

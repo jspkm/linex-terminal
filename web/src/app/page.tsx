@@ -160,6 +160,18 @@ export default function Home() {
     }
   }, [activeView, generatorTab, selectedISV, loadIncentiveSetDetail]);
 
+  // Clear optimization state when incentive set changes and doesn't match loaded optimization
+  useEffect(() => {
+    if (!selectedISV) return;
+    const currentOptISV = optimization.optimizationState?.incentive_set_version;
+    if (currentOptISV && currentOptISV !== selectedISV) {
+      optimization.setOptimizationState(null);
+      optimization.setOptimizationId(null);
+      optimization.setSelectedSavedOptimizationId(null);
+      optimization.setOptimizeInProgress(false);
+    }
+  }, [selectedISV, optimization.optimizationState?.incentive_set_version, optimization.setOptimizationState, optimization.setOptimizationId, optimization.setSelectedSavedOptimizationId, optimization.setOptimizeInProgress]);
+
   // Optimization polling
   useEffect(() => {
     if (!optimization.optimizationId || !optimization.optimizationPolling) return;
@@ -273,6 +285,8 @@ export default function Home() {
     const cachedState = optimizationCacheRef.current[cachedOptimizationId];
     if (!cachedState) return;
     if (optimizationState && optimizationState.catalog_version === selectedCatalogVersion) return;
+    // Don't restore cached optimization if it belongs to a different incentive set
+    if (incentives.selectedIncentiveSetVersion && cachedState?.incentive_set_version && cachedState.incentive_set_version !== incentives.selectedIncentiveSetVersion) return;
     setSelectedSavedOptimizationId(cachedOptimizationId);
     setOptimizationState(cachedState);
     setOptimizationId(cachedOptimizationId);
