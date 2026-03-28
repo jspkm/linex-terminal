@@ -1,6 +1,6 @@
 # Linex Terminal
 
-Terminal and quant agents for the Linex loyalty platform. Learns behavioral profiles from transaction data, optimizes incentive programs through simulation, and provides an agent chat interface for portfolio management.
+Terminal where Linex quant agents work and interact with the humans. The Linex agents currently excel at learning behavioral profiles from portfolios of transaction data, optimizing incentive programs through (primarily) Monte Carlo simulation. They are also good at answering endless questions from humans about what they did and how they did it, as well as general queries about the data. They can also create custom workflows since their users are likely to unique workflows of their own, and we certainly don't want them to bother the programmer.
 
 ## Architecture
 
