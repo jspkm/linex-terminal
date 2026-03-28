@@ -398,6 +398,42 @@ def delete_optimize_endpoint(optimization_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/linexone-dev/us-central1/save_report_config", methods=["POST"])
+def save_report_config_endpoint():
+    from handlers import report_configs as h_rc
+    try:
+        return _resp(h_rc.handle_save_report_config(request.get_json(silent=True) or {}))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/linexone-dev/us-central1/list_report_configs", methods=["GET"])
+def list_report_configs_endpoint():
+    from handlers import report_configs as h_rc
+    try:
+        return _resp(h_rc.handle_list_report_configs())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/linexone-dev/us-central1/load_report_config/<config_id>", methods=["GET"])
+def load_report_config_endpoint(config_id):
+    from handlers import report_configs as h_rc
+    try:
+        return _resp(h_rc.handle_load_report_config(config_id))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/linexone-dev/us-central1/delete_report_config/<config_id>", methods=["DELETE"])
+def delete_report_config_endpoint(config_id):
+    from handlers import report_configs as h_rc
+    try:
+        return _resp(h_rc.handle_delete_report_config(config_id))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/linexone-dev/us-central1/export_deal_memo/<optimization_id>", methods=["POST"])
 def export_deal_memo_endpoint(optimization_id):
     try:

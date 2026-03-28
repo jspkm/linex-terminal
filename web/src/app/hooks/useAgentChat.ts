@@ -636,17 +636,61 @@ export function useAgentChat(deps: AgentChatDeps) {
         const columns = (gridCustomColumns || []).map((c) => ({
           label: c.label, exprSource: c.exprSource, format: c.format, totalsExpr: c.totalsExpr,
         }));
-        setAgentChatMessages((prev) => [...prev, {
-          id: `${Date.now()}-sys`, role: "agent",
-          text: `Report configuration "${configName}" saved with ${columns.length} custom column(s).`,
-          submittedAt: formatChatTimestamp(new Date()),
-        }]);
+        try {
+          const res = await fetch(`${CLOUD_FUNCTION_URL}/save_report_config`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: configName, columns }),
+          });
+          const data = res.ok ? await res.json() : null;
+          setAgentChatMessages((prev) => [...prev, {
+            id: `${Date.now()}-sys`, role: "agent",
+            text: data ? `Report "${configName}" saved (${columns.length} columns). ID: ${data.config_id}` : `Failed to save report config.`,
+            submittedAt: formatChatTimestamp(new Date()),
+          }]);
+        } catch {
+          setAgentChatMessages((prev) => [...prev, { id: `${Date.now()}-sys`, role: "agent", text: "Failed to save report config.", submittedAt: formatChatTimestamp(new Date()) }]);
+        }
       } else if (action.type === "load_report_config") {
-        setAgentChatMessages((prev) => [...prev, {
-          id: `${Date.now()}-sys`, role: "agent",
-          text: `Report configuration loaded.`,
-          submittedAt: formatChatTimestamp(new Date()),
-        }]);
+        const configId = action.config_id || "";
+        try {
+          const res = await fetch(`${CLOUD_FUNCTION_URL}/load_report_config/${configId}`);
+          if (res.ok) {
+            const data = await res.json();
+            const loadedColumns = (data.columns || []).map((c: { label: string; exprSource: string; format: string; totalsExpr?: string }) => {
+              const fn = compileFormula(c.exprSource || "");
+              if (!fn) return null;
+              return {
+                id: `custom-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                label: c.label, expr: fn, exprSource: c.exprSource,
+                format: c.format || "number", totalsExpr: c.totalsExpr || "sum",
+              };
+            }).filter(Boolean) as GridCustomColumn[];
+            setGridCustomColumns(loadedColumns);
+            setAgentChatMessages((prev) => [...prev, {
+              id: `${Date.now()}-sys`, role: "agent",
+              text: `Report "${data.name}" loaded with ${loadedColumns.length} column(s).`,
+              submittedAt: formatChatTimestamp(new Date()),
+            }]);
+          } else {
+            setAgentChatMessages((prev) => [...prev, { id: `${Date.now()}-sys`, role: "agent", text: "Report config not found.", submittedAt: formatChatTimestamp(new Date()) }]);
+          }
+        } catch {
+          setAgentChatMessages((prev) => [...prev, { id: `${Date.now()}-sys`, role: "agent", text: "Failed to load report config.", submittedAt: formatChatTimestamp(new Date()) }]);
+        }
+      } else if (action.type === "list_report_configs") {
+        try {
+          const res = await fetch(`${CLOUD_FUNCTION_URL}/list_report_configs`);
+          if (res.ok) {
+            const data = await res.json();
+            const configs = data.configs || [];
+            const text = configs.length === 0
+              ? "No saved report configurations."
+              : configs.map((c: { name: string; config_id: string; columns: unknown[]; created_at: string }, i: number) => `${i + 1}. ${c.name} (${(c.columns || []).length} columns, ${c.config_id})`).join("\n");
+            setAgentChatMessages((prev) => [...prev, { id: `${Date.now()}-sys`, role: "agent", text, submittedAt: formatChatTimestamp(new Date()) }]);
+          }
+        } catch {
+          setAgentChatMessages((prev) => [...prev, { id: `${Date.now()}-sys`, role: "agent", text: "Failed to list report configs.", submittedAt: formatChatTimestamp(new Date()) }]);
+        }
       } else if (action.type === "update_chart_config" || action.type === "update_layout") {
         setAgentChatMessages((prev) => [...prev, {
           id: `${Date.now()}-sys`, role: "agent",

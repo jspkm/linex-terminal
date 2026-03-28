@@ -818,3 +818,65 @@ def fs_delete_workflow(workflow_id: str) -> bool:
         return False
     doc_ref.delete()
     return True
+
+
+# ---------- Report Configs ----------
+
+REPORT_CONFIG_COLLECTION = "report_configs"
+
+
+def fs_save_report_config(name: str, columns: list[dict], charts: list[dict] | None = None, layout: dict | None = None) -> dict:
+    """Save a report configuration. Returns the config dict."""
+    db = _get_db()
+    config_id = f"rc_{uuid.uuid4().hex[:12]}"
+    now_iso = datetime.datetime.utcnow().isoformat()
+    doc = {
+        "config_id": config_id,
+        "name": name.strip(),
+        "columns": columns,
+        "charts": charts or [],
+        "layout": layout or {},
+        "created_at": now_iso,
+        "updated_at": now_iso,
+    }
+    db.collection(REPORT_CONFIG_COLLECTION).document(config_id).set(doc)
+    return doc
+
+
+def fs_list_report_configs() -> list[dict]:
+    """List all report configs, newest first."""
+    db = _get_db()
+    results: list[dict] = []
+    for doc in db.collection(REPORT_CONFIG_COLLECTION).stream():
+        data = _serialize_dates(doc.to_dict() or {})
+        results.append({
+            "config_id": data.get("config_id", doc.id),
+            "name": data.get("name", ""),
+            "columns": data.get("columns", []),
+            "charts": data.get("charts", []),
+            "layout": data.get("layout", {}),
+            "created_at": data.get("created_at", ""),
+            "updated_at": data.get("updated_at", ""),
+        })
+    results.sort(key=lambda c: c.get("created_at", ""), reverse=True)
+    return results
+
+
+def fs_load_report_config(config_id: str) -> dict | None:
+    """Load a report config by ID. Returns None if not found."""
+    db = _get_db()
+    doc = db.collection(REPORT_CONFIG_COLLECTION).document(config_id).get()
+    if not doc.exists:
+        return None
+    return _serialize_dates(doc.to_dict())
+
+
+def fs_delete_report_config(config_id: str) -> bool:
+    """Delete a report config. Returns True if it existed."""
+    db = _get_db()
+    doc_ref = db.collection(REPORT_CONFIG_COLLECTION).document(config_id)
+    doc = doc_ref.get()
+    if not doc.exists:
+        return False
+    doc_ref.delete()
+    return True

@@ -359,6 +359,61 @@ def export_deal_memo(req: https_fn.Request) -> https_fn.Response:
         return _resp({"error": str(e)}, 500)
 
 
+# ==================== Report Config endpoints ====================
+
+
+@https_fn.on_request(cors=_CORS_ALL)
+def save_report_config(req: https_fn.Request) -> https_fn.Response:
+    if req.method == "OPTIONS":
+        return https_fn.Response(status=204)
+    guard = _check_guard()
+    if guard:
+        return _resp(guard)
+    try:
+        from handlers.report_configs import handle_save_report_config
+        return _resp(handle_save_report_config(req.get_json(silent=True) or {}))
+    except Exception as e:
+        return _resp({"error": str(e)}, 500)
+
+
+@https_fn.on_request(cors=_CORS_ALL)
+def list_report_configs(req: https_fn.Request) -> https_fn.Response:
+    if req.method == "OPTIONS":
+        return https_fn.Response(status=204)
+    try:
+        from handlers.report_configs import handle_list_report_configs
+        return _resp(handle_list_report_configs())
+    except Exception as e:
+        return _resp({"error": str(e)}, 500)
+
+
+@https_fn.on_request(cors=_CORS_ALL)
+def load_report_config(req: https_fn.Request) -> https_fn.Response:
+    if req.method == "OPTIONS":
+        return https_fn.Response(status=204)
+    try:
+        from handlers.report_configs import handle_load_report_config
+        config_id = _extract_path_param(req, "load_report_config") or ""
+        return _resp(handle_load_report_config(config_id))
+    except Exception as e:
+        return _resp({"error": str(e)}, 500)
+
+
+@https_fn.on_request(cors=_CORS_ALL)
+def delete_report_config(req: https_fn.Request) -> https_fn.Response:
+    if req.method == "OPTIONS":
+        return https_fn.Response(status=204)
+    guard = _check_guard()
+    if guard:
+        return _resp(guard)
+    try:
+        from handlers.report_configs import handle_delete_report_config
+        config_id = _extract_path_param(req, "delete_report_config") or ""
+        return _resp(handle_delete_report_config(config_id))
+    except Exception as e:
+        return _resp({"error": str(e)}, 500)
+
+
 # ==================== Incentive Set endpoints ====================
 
 

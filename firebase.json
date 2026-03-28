@@ -127,6 +127,22 @@
                 "function": "export_deal_memo"
             },
             {
+                "source": "/api/save_report_config",
+                "function": "save_report_config"
+            },
+            {
+                "source": "/api/list_report_configs",
+                "function": "list_report_configs"
+            },
+            {
+                "source": "/api/load_report_config/**",
+                "function": "load_report_config"
+            },
+            {
+                "source": "/api/delete_report_config/**",
+                "function": "delete_report_config"
+            },
+            {
                 "source": "/api/list_incentive_sets",
                 "function": "list_incentive_sets"
             },

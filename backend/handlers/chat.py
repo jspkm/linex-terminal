@@ -398,6 +398,8 @@ def handle_agent_chat(data: dict) -> tuple[dict, int]:
             '  Saves the current grid column configuration for later reuse.\n'
             '- load_report_config: {"type":"load_report_config","config_id":"<ID>"}\n'
             '  Loads and applies a saved report configuration.\n'
+            '- list_report_configs: {"type":"list_report_configs"}\n'
+            '  Lists all saved report configurations. Use when user asks "show my reports" or "list saved views".\n'
             '- update_chart_config: {"type":"update_chart_config","chart_type":"bar|line|heatmap","data_source":"lift|net_ltv|cost|probability_positive_lift","group_by":"profile_id"}\n'
             '  Creates or updates a chart visualization.\n'
             '- update_layout: {"type":"update_layout","show_sensitivity":true|false,"show_percentiles":true|false,"compact":true|false}\n'
