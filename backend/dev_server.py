@@ -434,6 +434,14 @@ def delete_report_config_endpoint(config_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/linexone-dev/us-central1/run_what_if", methods=["POST"])
+def run_what_if_endpoint():
+    try:
+        return _resp(h_optimize.handle_run_what_if(request.get_json(silent=True) or {}))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/linexone-dev/us-central1/export_deal_memo/<optimization_id>", methods=["POST"])
 def export_deal_memo_endpoint(optimization_id):
     try:

@@ -363,6 +363,96 @@ def run_monte_carlo_optimization(
     return result
 
 
+def run_what_if(
+    optimization_id: str,
+    uptake_override: float | None = None,
+    cost_override: float | None = None,
+    profile_id: str | None = None,
+    n_simulations: int = 5000,
+) -> dict:
+    """Re-run MC simulation with overridden assumptions on an existing optimization.
+
+    Returns comparison data: base results vs what-if results.
+    """
+    from profile_generator.firestore_client import fs_load_optimization
+    from models.monte_carlo import MonteCarloOptimizationResult
+
+    state = fs_load_optimization(optimization_id)
+    if not state or not isinstance(state, MonteCarloOptimizationResult):
+        return {"error": "Optimization not found or not a Monte Carlo result"}
+
+    catalog = load_catalog(state.catalog_version)
+    if not catalog:
+        return {"error": f"Catalog '{state.catalog_version}' not found"}
+
+    inc_set = fs_load_incentive_set(state.incentive_set_version) if state.incentive_set_version else None
+    if not inc_set:
+        inc_set = load_or_seed_default()
+
+    rng = np.random.default_rng(seed=99)
+
+    # Build modified incentives
+    modified_incentives = []
+    for inc in inc_set.incentives:
+        data = inc.model_dump()
+        if uptake_override is not None:
+            data["redemption_rate"] = min(1.0, max(0.0, uptake_override))
+        if cost_override is not None:
+            data["estimated_annual_cost_per_user"] = max(0.0, cost_override)
+        modified_incentives.append(Incentive(**data))
+
+    profiles_to_run = catalog.profiles
+    if profile_id:
+        profiles_to_run = [p for p in catalog.profiles if p.profile_id == profile_id]
+        if not profiles_to_run:
+            return {"error": f"Profile '{profile_id}' not found in catalog"}
+
+    comparisons = []
+    for profile in profiles_to_run:
+        baseline_ltv = profile.portfolio_ltv or (profile.ltv * profile.population_count)
+
+        # Find the base result for this profile
+        base_comp = next((c for c in state.profiles if c.profile_id == profile.profile_id), None)
+        base_bundle_names = base_comp.best_bundle.selected_incentives if base_comp else []
+
+        # Re-run with the same bundle but modified assumptions
+        what_if_incs = [inc for inc in modified_incentives if inc.name in base_bundle_names]
+        what_if_result = _simulate_bundle(profile, what_if_incs, "What-if", n_simulations, rng)
+
+        comparisons.append({
+            "profile_id": profile.profile_id,
+            "base": {
+                "net_ltv": base_comp.best_bundle.expected_net_ltv if base_comp else baseline_ltv,
+                "lift": base_comp.best_bundle.expected_lift if base_comp else 0,
+                "cost": base_comp.best_bundle.expected_cost if base_comp else 0,
+                "p50": base_comp.best_bundle.net_ltv_percentiles.get("p50", 0) if base_comp else 0,
+            },
+            "what_if": {
+                "net_ltv": what_if_result.expected_net_ltv,
+                "lift": what_if_result.expected_lift,
+                "cost": what_if_result.expected_cost,
+                "p50": what_if_result.net_ltv_percentiles["p50"],
+                "probability_positive_lift": what_if_result.probability_positive_lift,
+            },
+            "delta_net_ltv": round(what_if_result.expected_net_ltv - (base_comp.best_bundle.expected_net_ltv if base_comp else baseline_ltv), 2),
+            "delta_lift": round(what_if_result.expected_lift - (base_comp.best_bundle.expected_lift if base_comp else 0), 2),
+        })
+
+    overrides_desc = []
+    if uptake_override is not None:
+        overrides_desc.append(f"uptake={uptake_override:.0%}")
+    if cost_override is not None:
+        overrides_desc.append(f"cost=${cost_override:.2f}")
+
+    return {
+        "optimization_id": optimization_id,
+        "overrides": ", ".join(overrides_desc),
+        "profiles": comparisons,
+        "total_delta_net_ltv": round(sum(c["delta_net_ltv"] for c in comparisons), 2),
+        "total_delta_lift": round(sum(c["delta_lift"] for c in comparisons), 2),
+    }
+
+
 def _compute_sensitivity(
     catalog: ProfileCatalog,
     inc_set: IncentiveSet,

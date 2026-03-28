@@ -123,6 +123,10 @@
                 "function": "delete_optimize_fn"
             },
             {
+                "source": "/api/run_what_if",
+                "function": "run_what_if"
+            },
+            {
                 "source": "/api/export_deal_memo/**",
                 "function": "export_deal_memo"
             },

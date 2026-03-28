@@ -691,6 +691,36 @@ export function useAgentChat(deps: AgentChatDeps) {
         } catch {
           setAgentChatMessages((prev) => [...prev, { id: `${Date.now()}-sys`, role: "agent", text: "Failed to list report configs.", submittedAt: formatChatTimestamp(new Date()) }]);
         }
+      } else if (action.type === "run_what_if") {
+        const optId = action.optimization_id || deps.optimizationId || "";
+        if (!optId) {
+          setAgentChatMessages((prev) => [...prev, { id: `${Date.now()}-sys`, role: "agent", text: "No optimization to run what-if on. Run an optimization first.", submittedAt: formatChatTimestamp(new Date()) }]);
+          continue;
+        }
+        try {
+          const body: Record<string, unknown> = { optimization_id: optId };
+          if (action.uptake_override != null) body.uptake_override = Number(action.uptake_override);
+          if (action.cost_override != null) body.cost_override = Number(action.cost_override);
+          if (action.profile_id) body.profile_id = action.profile_id;
+          const res = await fetch(`${CLOUD_FUNCTION_URL}/run_what_if`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const lines = [`What-if analysis (${data.overrides}):`];
+            for (const p of (data.profiles || [])) {
+              const sign = p.delta_lift >= 0 ? "+" : "";
+              lines.push(`  ${p.profile_id}: lift ${sign}$${Math.round(p.delta_lift).toLocaleString()} (was $${Math.round(p.base.lift).toLocaleString()})`);
+            }
+            lines.push(`  Total delta: ${data.total_delta_lift >= 0 ? "+" : ""}$${Math.round(data.total_delta_lift).toLocaleString()}`);
+            setAgentChatMessages((prev) => [...prev, { id: `${Date.now()}-sys`, role: "agent", text: lines.join("\n"), submittedAt: formatChatTimestamp(new Date()) }]);
+          } else {
+            setAgentChatMessages((prev) => [...prev, { id: `${Date.now()}-sys`, role: "agent", text: "What-if simulation failed.", submittedAt: formatChatTimestamp(new Date()) }]);
+          }
+        } catch {
+          setAgentChatMessages((prev) => [...prev, { id: `${Date.now()}-sys`, role: "agent", text: "What-if simulation failed.", submittedAt: formatChatTimestamp(new Date()) }]);
+        }
       } else if (action.type === "update_chart_config" || action.type === "update_layout") {
         setAgentChatMessages((prev) => [...prev, {
           id: `${Date.now()}-sys`, role: "agent",

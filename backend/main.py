@@ -348,6 +348,17 @@ def delete_optimize_fn(req: https_fn.Request) -> https_fn.Response:
 
 
 @https_fn.on_request(cors=_CORS_ALL, timeout_sec=60)
+def run_what_if(req: https_fn.Request) -> https_fn.Response:
+    if req.method == "OPTIONS":
+        return https_fn.Response(status=204)
+    try:
+        from handlers.optimize import handle_run_what_if
+        return _resp(handle_run_what_if(req.get_json(silent=True) or {}))
+    except Exception as e:
+        return _resp({"error": str(e)}, 500)
+
+
+@https_fn.on_request(cors=_CORS_ALL, timeout_sec=60)
 def export_deal_memo(req: https_fn.Request) -> https_fn.Response:
     if req.method == "OPTIONS":
         return https_fn.Response(status=204)

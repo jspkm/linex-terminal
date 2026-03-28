@@ -136,6 +136,27 @@ def handle_save_optimize(optimization_id: str) -> tuple[dict, int]:
 
 
 @handler
+def handle_run_what_if(data: dict) -> tuple[dict, int]:
+    """Run a what-if re-simulation with overridden assumptions."""
+    from profile_generator.monte_carlo import run_what_if
+
+    optimization_id = data.get("optimization_id", "")
+    if not optimization_id:
+        return {"error": "Missing optimization_id"}, 400
+
+    uptake_raw = data.get("uptake_override")
+    cost_raw = data.get("cost_override")
+    uptake = float(uptake_raw) if uptake_raw is not None else None
+    cost = float(cost_raw) if cost_raw is not None else None
+    profile_id = data.get("profile_id") or None
+
+    result = run_what_if(optimization_id, uptake_override=uptake, cost_override=cost, profile_id=profile_id)
+    if "error" in result:
+        return result, 404
+    return result, 200
+
+
+@handler
 def handle_export_deal_memo(optimization_id: str) -> tuple[dict, int]:
     """Generate a Deal Memo PDF for a Monte Carlo optimization."""
     from profile_generator.firestore_client import fs_load_optimization
