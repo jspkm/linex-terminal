@@ -11,6 +11,9 @@ from handlers._common import get_source_snippets, handler, llm_call
 
 _BUDGET_KEYWORDS = re.compile(r'\b(budget|spend|cap|spending\s*cap|cost\s*limit|spend\s*limit|no\s*more\s*than)\b', re.IGNORECASE)
 _TARGET_LTV_KEYWORDS = re.compile(r'\b(target\s*(ltv|final|net|value|portfolio)|final\s*ltv|net\s*ltv|target\s+of)\b', re.IGNORECASE)
+_WHAT_IF_KEYWORDS = re.compile(r'\b(what\s*if|what\s*happens\s*if|suppose|hypothetical|scenario\s*where)\b', re.IGNORECASE)
+_UPTAKE_PATTERN = re.compile(r'uptake\s*(?:is|to|at|=|of|drops?\s*to|rises?\s*to|increases?\s*to|decreases?\s*to)?\s*(\d+(?:\.\d+)?)\s*%', re.IGNORECASE)
+_COST_OVERRIDE_PATTERN = re.compile(r'cost\s*(?:is|to|at|=|of|drops?\s*to|rises?\s*to|increases?\s*to|decreases?\s*to)?\s*\$\s*(\d+(?:\.\d+)?)', re.IGNORECASE)
 
 
 def _parse_dollar_amount(message: str) -> float | None:
@@ -46,6 +49,28 @@ def _extract_target_ltv(message: str) -> float | None:
     if not _TARGET_LTV_KEYWORDS.search(message):
         return None
     return _parse_dollar_amount(message)
+
+
+def _extract_what_if(message: str) -> tuple[float | None, float | None]:
+    """Extract what-if overrides from the user's message.
+
+    Returns ``(uptake_override, cost_override)`` where uptake is 0-1 float
+    and cost is a dollar amount.  Both may be ``None``.
+    """
+    if not _WHAT_IF_KEYWORDS.search(message):
+        return None, None
+    uptake: float | None = None
+    cost: float | None = None
+    m = _UPTAKE_PATTERN.search(message)
+    if m:
+        pct = float(m.group(1))
+        uptake = min(1.0, max(0.0, pct / 100.0))
+    m = _COST_OVERRIDE_PATTERN.search(message)
+    if m:
+        cost = float(m.group(1))
+    if uptake is None and cost is None:
+        return None, None
+    return uptake, cost
 
 
 @handler
@@ -452,6 +477,7 @@ def handle_agent_chat(data: dict) -> tuple[dict, int]:
     # ------------------------------------------------------------------ #
     user_budget = _extract_budget(message)
     user_target_ltv = _extract_target_ltv(message)
+    user_uptake, user_cost_override = _extract_what_if(message)
 
     # ------------------------------------------------------------------ #
     # Parse structured JSON response
@@ -561,5 +587,41 @@ def handle_agent_chat(data: dict) -> tuple[dict, int]:
                 result_dict["answer"] = (
                     f"Starting Monte Carlo optimization with {constraint_desc}."
                 )
+
+    # ------------------------------------------------------------------ #
+    # Post-processing: inject what-if overrides into run_what_if actions,
+    # or force-create the action if the LLM refused
+    # ------------------------------------------------------------------ #
+    has_what_if = user_uptake is not None or user_cost_override is not None
+    if has_what_if and not has_constraint:
+        actions = result_dict.get("actions", [])
+        has_what_if_action = any(
+            isinstance(a, dict) and a.get("type") == "run_what_if"
+            for a in actions
+        )
+
+        if has_what_if_action:
+            for a in actions:
+                if isinstance(a, dict) and a.get("type") == "run_what_if":
+                    if user_uptake is not None:
+                        a["uptake_override"] = user_uptake
+                    if user_cost_override is not None:
+                        a["cost_override"] = user_cost_override
+        else:
+            action_obj = {"type": "run_what_if"}
+            if user_uptake is not None:
+                action_obj["uptake_override"] = user_uptake
+            if user_cost_override is not None:
+                action_obj["cost_override"] = user_cost_override
+            result_dict["actions"] = actions + [action_obj]
+            parts = []
+            if user_uptake is not None:
+                parts.append(f"{user_uptake * 100:.0f}% uptake")
+            if user_cost_override is not None:
+                parts.append(f"${user_cost_override:,.0f} cost")
+            override_desc = " and ".join(parts)
+            result_dict["answer"] = (
+                f"Running what-if simulation with {override_desc}."
+            )
 
     return (result_dict, 200)
