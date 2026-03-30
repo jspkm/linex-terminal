@@ -304,7 +304,7 @@ export default function Home() {
   }, [activeView, learn.selectedCatalogVersion]);
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: C.bg, fontFamily: "'IBM Plex Mono', 'SF Mono', Menlo, monospace", color: C.text }}>
+    <div className="flex h-screen overflow-hidden" style={{ background: C.bg, color: C.text }}>
       <NavRail
         view={activeView}
         setView={(v) => {

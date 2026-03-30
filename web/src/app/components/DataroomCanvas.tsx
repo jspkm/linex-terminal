@@ -128,10 +128,10 @@ export default function DataroomCanvas({ datasets }: DataroomCanvasProps) {
                   <td style={{ paddingTop: 8, paddingBottom: 8, paddingRight: 12, paddingLeft: 36, fontSize: 12, color: C.text, fontWeight: 500 }}>
                     {d.upload_name || d.dataset_id}
                   </td>
-                  <td style={{ padding: "8px 10px", color: C.muted, fontFamily: "monospace", fontSize: 10 }}>
+                  <td style={{ padding: "8px 10px", color: C.muted, fontFamily: "var(--font-geist-mono), 'Geist Mono', monospace", fontSize: 10 }}>
                     {(d.row_count || 0).toLocaleString()}
                   </td>
-                  <td style={{ padding: "8px 10px", color: C.muted, fontFamily: "monospace", fontSize: 10 }}>
+                  <td style={{ padding: "8px 10px", color: C.muted, fontFamily: "var(--font-geist-mono), 'Geist Mono', monospace", fontSize: 10 }}>
                     {(d.parsed_user_count || 0).toLocaleString()}
                   </td>
                   <td style={{ padding: "8px 10px", color: C.muted, fontSize: 10 }}>
