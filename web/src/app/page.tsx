@@ -27,6 +27,21 @@ export default function Home() {
   const [typedWelcomeLine, setTypedWelcomeLine] = useState("");
   const [showRecentCatalogDetail, setShowRecentCatalogDetail] = useState(false);
   const [showRecentIncentiveDetail, setShowRecentIncentiveDetail] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      document.documentElement.requestFullscreen();
+    }
+  };
 
   // Pending delete state with refs for synchronous access in async flows
   const [, setPendingDeleteCatalog, pendingDeleteCatalogRef] = useRefState<string | null>(null);
@@ -296,6 +311,8 @@ export default function Home() {
           if (v !== "terminal") wf.setActiveWorkflow(null);
           setActiveView(v);
         }}
+        isFullscreen={isFullscreen}
+        onToggleFullscreen={toggleFullscreen}
       />
 
       <div className="flex-1 overflow-hidden" style={{ background: "#070a09" }}>

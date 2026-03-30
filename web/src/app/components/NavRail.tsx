@@ -6,6 +6,8 @@ import { C, type View } from "./theme";
 interface NavRailProps {
   view: View;
   setView: (v: View) => void;
+  isFullscreen?: boolean;
+  onToggleFullscreen?: () => void;
 }
 
 const items: { id: View; icon: string; label: string }[] = [
@@ -14,7 +16,7 @@ const items: { id: View; icon: string; label: string }[] = [
   { id: "dataroom", icon: "📁", label: "Dataroom" },
 ];
 
-export default function NavRail({ view, setView }: NavRailProps) {
+export default function NavRail({ view, setView, isFullscreen, onToggleFullscreen }: NavRailProps) {
   const [logoHover, setLogoHover] = useState(false);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
 
@@ -140,6 +142,50 @@ export default function NavRail({ view, setView }: NavRailProps) {
           )}
         </div>
       ))}
+
+      {/* Fullscreen toggle at bottom */}
+      {onToggleFullscreen && (
+        <div
+          onClick={onToggleFullscreen}
+          onMouseEnter={() => setHoveredItem("fullscreen")}
+          onMouseLeave={() => setHoveredItem(null)}
+          style={{
+            marginTop: "auto",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "8px 4px",
+            borderRadius: 2,
+            cursor: "pointer",
+            fontSize: 14,
+            position: "relative",
+            color: C.muted,
+          }}
+        >
+          {isFullscreen ? "⊡" : "⊞"}
+          {hoveredItem === "fullscreen" && (
+            <div
+              style={{
+                position: "absolute",
+                left: "calc(100% + 8px)",
+                top: "50%",
+                transform: "translateY(-50%)",
+                whiteSpace: "nowrap",
+                zIndex: 1001,
+                background: C.bg,
+                height: 28,
+                display: "flex",
+                alignItems: "center",
+                padding: "0 12px",
+              }}
+            >
+              <span style={{ fontSize: 11, fontWeight: 600, color: C.textSec, letterSpacing: "0.06em" }}>
+                {isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
